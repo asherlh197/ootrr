@@ -13,7 +13,7 @@ use crate::progressive::{stage as stage_upgrades, Size};
 use crate::romfs::Romfs;
 use crate::rsizetable::{self, Rst};
 use crate::settings::seed::SeedFile;
-use crate::slice::support::Songs;
+use crate::slice::support::{Keep, Songs};
 use crate::special;
 use crate::slice::banc::fingerprint;
 use crate::slice::data::Data;
@@ -155,6 +155,7 @@ pub fn build_with(seed: &SeedFile, romfs: &P, load: &P, mod_name: &str, host: Ho
         )));
     }
     let roam: bool = p.keys_roam();
+    let hideout: bool = p.hideout != Keep::Vanilla;
     let gift_keys: Vec<crate::gift_keys::Gift> = crate::gift_keys::gifts(&d, seed)?;
     let key_cs: Vec<crate::debug_names::KeyCredit> = crate::debug_names::key_credits(&d, seed);
     // Dungeon items at NPCs with their own events, sale offers, story chests and the Treasure
@@ -178,6 +179,9 @@ pub fn build_with(seed: &SeedFile, romfs: &P, load: &P, mod_name: &str, host: Ho
         }
     }
     let mut keys: Vec<&'static str> = if roam { KEY_DUNGEONS.to_vec() } else { Vec::new() };
+    if hideout && !keys.contains(&"GerudoFortress") {
+        keys.push("GerudoFortress");
+    }
     for k in crate::gift_keys::small_dungeons(&gift_keys) {
         if !keys.contains(&k) {
             keys.push(k);
@@ -230,6 +234,7 @@ pub fn build_with(seed: &SeedFile, romfs: &P, load: &P, mod_name: &str, host: Ho
             }),
             (e, None) => e,
         };
+        let e: Option<Edited> = crate::hideout_keys::edit_banc(&f, raw, e, &d, &p, seed, &order.assign)?;
         if let Some(e) = crate::slice::map_passes::run(&f, raw, e, &mut passes)? {
             edits.push(e);
         }
@@ -293,8 +298,8 @@ pub fn build_with(seed: &SeedFile, romfs: &P, load: &P, mod_name: &str, host: Ho
     let placed: BM<String, &'static str> = flow_wraps(&d, seed);
     let chest_fams: BS<&str> = upgrades.iter().map(|u| u.0.as_str()).collect();
     let gs: Vec<crate::progressive::Grant> = wrap_grants(&d, seed, &chest_fams, &placed);
-    if !upgrades.is_empty() || roam || gr.active() || !passes.silver_used.is_empty() {
-        let mut outs: Vec<crate::staging::Out> = if !upgrades.is_empty() || roam { stage_upgrades(&mut rf, &upgrades, None, &kids, &keys)? } else { Vec::new() };
+    if !upgrades.is_empty() || roam || hideout || gr.active() || !passes.silver_used.is_empty() {
+        let mut outs: Vec<crate::staging::Out> = if !upgrades.is_empty() || roam || hideout { stage_upgrades(&mut rf, &upgrades, None, &kids, &keys)? } else { Vec::new() };
         crate::dungeon_grant::stage(&mut rf, &mut outs, &gr, &passes.marks.used)?;
         crate::slice::silver::stage(&mut rf, &mut outs, &passes.silver_used)?;
         scrub_rows = crate::scrubs_b::stage_rows(&mut rf, &scrub_jobs, &mut outs, false)?;
@@ -327,6 +332,7 @@ pub fn build_with(seed: &SeedFile, romfs: &P, load: &P, mod_name: &str, host: Ho
     });
     let windows: Vec<(&str, &str)> = if arrows_key { vec![crate::story_skip::ITEM_GET] } else { Vec::new() };
     crate::gift_keys::apply(&mut rf, &mut staged.files, &gift_keys, &windows)?;
+    crate::hideout_keys::stage_flow(&mut rf, &mut staged.files, &d, &p, seed, &order.assign)?;
     for f in &staged.files {
         pk.write_romfs(&f.path, &f.z)?;
         if f.new > f.old {

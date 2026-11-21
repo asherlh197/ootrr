@@ -110,6 +110,21 @@ pub fn allowed(d: &Data, w: &World, p: &Plan, it: ItemId, l: LocId) -> bool {
         return false;
     }
     let here: Option<&str> = w.regions[w.locs[l].region].dungeon.as_deref();
+    // Native guard drops are shuffled checks when Hideout keys move: only a normal floor pickup
+    // can be written into their spare actor (crate::gerudo_drops, crate::hideout_keys).
+    if crate::hideout_keys::is_native(name) {
+        return crate::gerudo_drops::eligible(d, &i.name);
+    }
+    if p.hideout != Keep::Vanilla && i.kind == "HideoutSmallKey" {
+        let dungeon: bool = here.is_some();
+        let place: bool = match p.hideout {
+            Keep::AnyDungeon => dungeon,
+            _ => true,
+        };
+        let chest: bool = d.flow.by_name(name).is_none() && !d.special(name) && crate::slice::dungeon_items::chest_ok(d, name) && d.cat.by_name(name).is_some_and(|c| c.kind == "chest");
+        let gift: bool = crate::gift_keys::spot(d, name);
+        return place && i.dungeon.is_some() && (chest || gift);
+    }
     if scoped(p, &i.kind) {
         return i.dungeon.is_some() && i.dungeon.as_deref() == here;
     }
@@ -297,6 +312,8 @@ pub fn generate_data(d: &Data, s: &Settings, seed: &str, o: &GenOpts) -> Res<Gen
             && !(lay.is_some() && crate::shops::is_loc(&w.locs[*l].name))
             && !crate::slice::junk_spots::only(&p, &w.locs[*l].name)
             && !(p.silver && crate::slice::silver::is_spot(&w.locs[*l].name))
+            // Native guard drops are now shuffled checks; their vanilla key moves into the pool.
+            && !crate::hideout_keys::is_native(&w.locs[*l].name)
             // The Light Arrows Cutscene holds Ganon's Boss Key in this mode; its Light Arrows join the pool.
             && !(p.keys.ganon == Keep::Lacs && w.locs[*l].name == crate::lacs_key::LOC)
         {
@@ -345,7 +362,7 @@ pub fn generate_data(d: &Data, s: &Settings, seed: &str, o: &GenOpts) -> Res<Gen
         loop {
             let quick: bool = p.songs == Songs::Anywhere && redo + 1 < crate::slice::song_spots::TRIES;
             let (tries, switch): (u32, u32) = if quick { (o.tries.min(crate::slice::song_spots::QUICK_TRIES), o.switch.min(crate::slice::song_spots::QUICK_SWITCH)) } else { (o.tries, o.switch) };
-            let g: Placement = match fill_ordered(&w, &base, &pk.free, ok, order, &mut rng, tries, &fixed, !p.keys_roam() && gates.is_none(), r, reach, switch, &watch) {
+            let g: Placement = match fill_ordered(&w, &base, &pk.free, ok, order, &mut rng, tries, &fixed, !p.keys_roam() && p.hideout == Keep::Vanilla && gates.is_none(), r, reach, switch, &watch) {
                 Ok(g) => g,
                 // A run out of time (or cancelled) stops here with that message, not a retry's.
                 Err(_) if quick && watch.check().is_ok() => {

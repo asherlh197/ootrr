@@ -85,6 +85,7 @@ pub fn key_dungeon(name: &str) -> Option<&'static str> {
         "Spirit Temple" => Some("SpiritTemple"),
         "Bottom of the Well" => Some("BottomOfTheWell"),
         "Gerudo Training Ground" => Some("GerudoTrainingGround"),
+        "Thieves Hideout" => Some("GerudoFortress"),
         "Ganons Castle" => Some("InsideGanonCastle"),
         _ => None,
     }
@@ -971,7 +972,7 @@ mod tests {
     #[test]
     fn item_dungeon_names_map_to_the_key_counts_and_scenes() {
         assert_eq!(key_dungeon("Ganons Castle"), Some("InsideGanonCastle"));
-        assert_eq!(key_dungeon("Thieves Hideout"), None);
+        assert_eq!(key_dungeon("Thieves Hideout"), Some("GerudoFortress"));
         assert_eq!(scene_dungeon("Banc/InsideGanonCastle/x.bcett.byml.zs"), Some("InsideGanonCastle"));
         assert_eq!(scene_dungeon("Banc/GanonCastle/x.bcett.byml.zs"), None);
         assert!(KEY_DUNGEONS.iter().all(|d| DUNGEONS.contains(d)));

@@ -34,7 +34,7 @@ pub enum Item {
 impl Item {
     pub fn of(kind: &str) -> Option<Item> {
         match kind {
-            "SmallKey" => Some(Item::Small),
+            "SmallKey" | "HideoutSmallKey" => Some(Item::Small),
             k => Grant::of(k).map(Item::Other),
         }
     }

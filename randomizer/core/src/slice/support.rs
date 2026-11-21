@@ -55,6 +55,7 @@ pub enum Songs {
 pub struct Plan {
     pub chests: Mode,
     pub keys: di::Keys,
+    pub hideout: Keep,
     pub rewards: crate::flow_extra::Rewards,
     pub hearts: bool,
     pub world: pu::Free,
@@ -135,6 +136,22 @@ fn chest_mode(s: &Settings, bad: &mut Vec<String>) -> Mode {
     }
 }
 
+fn hideout_mode(s: &Settings, bad: &mut Vec<String>) -> Keep {
+    match s.text("shuffle_hideoutkeys") {
+        Ok("vanilla") => Keep::Vanilla,
+        Ok("any_dungeon") => Keep::AnyDungeon,
+        Ok("keysanity") | Ok("anywhere") => Keep::Anywhere,
+        Ok(v) => {
+            bad.push(format!("shuffle_hideoutkeys is {v}, which this build cannot place yet (only vanilla, any_dungeon and keysanity work)"));
+            Keep::Vanilla
+        }
+        Err(e) => {
+            bad.push(e.to_string());
+            Keep::Vanilla
+        }
+    }
+}
+
 pub const KEY_LAYOUTS: [&str; 3] = ["fire_key_layout", "water_key_layout", "spirit_key_layout"];
 
 impl Plan {
@@ -170,6 +187,14 @@ impl Plan {
         }
         if self.keys_roam() {
             out.extend(KEY_LAYOUTS.iter().map(|k| (*k, "shuffled")));
+        }
+        if self.hideout != Keep::Vanilla {
+            let mode: &str = match self.hideout {
+                Keep::AnyDungeon => "any_dungeon",
+                Keep::Anywhere => "keysanity",
+                _ => "any_dungeon",
+            };
+            out.push(("shuffle_hideoutkeys", mode));
         }
         if self.chus {
             out.push((crate::slice::bombchus::LOGIC_KEY, "true"));
@@ -248,6 +273,10 @@ pub fn plan(s: &Settings) -> Res<Plan> {
     let mut noted: Vec<String> = Vec::new();
     crate::slice::unsupported::check(s, &mut bad, &mut noted);
     let chests: Mode = chest_mode(s, &mut bad);
+    let hideout: Keep = hideout_mode(s, &mut bad);
+    if hideout != Keep::Vanilla && matches!(chests, Mode::Off | Mode::Overworld) {
+        bad.push("shuffle_hideoutkeys needs chest shuffle to be Dungeons only or Everywhere".to_string());
+    }
     let world: pu::Free = pu::mode(s, &mut bad);
     let drops: crate::pot_slice::Drops = crate::pot_slice::plan::read(s, &mut bad);
     let keys: di::Keys = di::Keys::read(s, &mut bad);
@@ -288,6 +317,9 @@ pub fn plan(s: &Settings) -> Res<Plan> {
     let open: crate::open_world::Opts = crate::open_world::read(s, &mut bad);
     let trials: crate::ganon_trials::Trials = crate::ganon_trials::read(s, &mut bad);
     let difficulty: crate::difficulty::Opts = crate::difficulty::read(s, &mut bad);
+    if hideout != Keep::Vanilla && open.fortress != crate::open_world::Fortress::Open {
+        bad.push("shuffle_hideoutkeys needs gerudo_fortress=open; the four native drops are only rewired for the already-cleared fortress".to_string());
+    }
     if open.fortress == crate::open_world::Fortress::Open {
         crate::start_items::give::add(&mut kit, "gerudo_card");
     }
@@ -344,6 +376,7 @@ pub fn plan(s: &Settings) -> Res<Plan> {
         (start.reward != Reward::Off, "You start the game with one random Stone or Medallion."),
         (!start.pouch.is_empty(), "The ticked Kokiri Sword, Deku Shield or Slingshot is added to the pouch when a new game starts. A ticked Big or Biggest Bullet Bag brings the Slingshot with it."),
         (keys.small.roams(), "Small keys can be found in other dungeons or outside them. A chest key is counted for the dungeon it belongs to and the chest says which."),
+        (hideout != Keep::Vanilla, "Thieves' Hideout Small Keys are shuffled. The four native key drops hold shuffled non-key items."),
         (gates.forest != Forest::Closed, "Kokiri Forest starts open. The blocker walls are switched off when a new game starts."),
         (gates.kakariko, "The Kakariko gate starts open and the castle visit is skipped. A new game sets the castle quest complete, the Door of Time quest past Impa's send off, the Fire Stone quest past the gate and the gate guard's flag, and gives the items of Zelda's Letter and the Song from Impa."),
         (gates.door, "The Door of Time starts open. The Temple of Time logic is edited so the door is always open and the Master Sword can be drawn without the Door of Time quest, and the door's opened flag is set when a new game starts, so the Ocarina and the Song of Time are not needed to reach the Master Sword. The quest itself is left alone, so Zelda's escape and the Song of Time stay checks, and the adult pedestal works before the Forest Sage so you can return to childhood at any time."),
@@ -432,7 +465,7 @@ pub fn plan(s: &Settings) -> Res<Plan> {
         notes.push(crate::lacs_key::NOTE.to_string());
         notes.push(crate::medal_gate::LACS_NOTE.to_string());
     }
-    Ok(Plan { chests, keys, rewards, hearts, world, songs, harp_colors, hints, fast, chest_sizes, intro, start, gates, excluded, notes, drops, skulls, remake, chus, qol, treasure, day_skulls, kit, open, npc, shops, bridge, debug_names, silver, lacs, rainbow, trials, door, nocturne, prelude, short, first_pickups, area_intros, story, endings, ocarinas, kokiri_sword, difficulty })
+    Ok(Plan { chests, keys, hideout, rewards, hearts, world, songs, harp_colors, hints, fast, chest_sizes, intro, start, gates, excluded, notes, drops, skulls, remake, chus, qol, treasure, day_skulls, kit, open, npc, shops, bridge, debug_names, silver, lacs, rainbow, trials, door, nocturne, prelude, short, first_pickups, area_intros, story, endings, ocarinas, kokiri_sword, difficulty })
 }
 
 #[cfg(test)]
