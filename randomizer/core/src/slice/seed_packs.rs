@@ -23,6 +23,7 @@ pub enum Kind {
     Free,
     Holder,
     Skull,
+    Native,
 }
 
 impl Kind {
@@ -49,6 +50,9 @@ impl Want {
 }
 
 fn kind_of(d: &Data, loc: &str, item: &str) -> Option<Kind> {
+    if crate::hideout_keys::is_native(loc) {
+        return crate::gerudo_drops::eligible(d, item).then_some(Kind::Native);
+    }
     if crate::slice::skulls::is_skull(d, loc) {
         let t: crate::slice::skulls::Table = crate::slice::skulls::table().ok()?;
         let shipped: bool = item == crate::slice::skulls::TOKEN || crate::slice::skulls::pickup(&t, d, item).is_some();
@@ -169,6 +173,7 @@ pub fn audit(rf: &mut Romfs, base: &P, wants: &BM<String, Want>) -> Res<Vec<Stri
             Kind::Free => "on the ground",
             Kind::Holder => "dropped by a pot, crate, flying pot, beehive, rock or grass tuft",
             Kind::Skull => "skulltula kit drop",
+            Kind::Native => "Gerudo carpenter guard drop",
         }));
     }
     for y in &ys {

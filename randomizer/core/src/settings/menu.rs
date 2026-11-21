@@ -315,7 +315,7 @@ const GERUDO_KEYS: View = View {
     label: "Gerudo Fortress Keys",
     tip: "Vanilla - Thieves' Hideout Keys will appear in their vanilla locations.\n\nAny dungeon - Thieves' Hideout Keys can only appear inside of any dungeon.\n\nOverworld - Thieves' Hideout Keys can only appear outside of dungeons.\n\nAnywhere - Thieves' Hideout Keys can appear anywhere in the world.",
     kind: Kind::Pick,
-    opts: &[yes("Vanilla", "vanilla"), broken("Any Dungeon", "any_dungeon"), broken("Overworld", "overworld"), broken("Anywhere", "keysanity")],
+    opts: &[yes("Vanilla", "vanilla"), yes("Any Dungeon", "any_dungeon"), broken("Overworld", "overworld"), yes("Anywhere", "keysanity")],
 };
 
 pub struct PortSection {

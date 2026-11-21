@@ -84,6 +84,18 @@ pub fn allowed(d: &Data, w: &World, p: &Plan, it: ItemId, l: LocId) -> bool {
             let chest: bool = d.flow.by_name(name).is_none() && !d.special(name) && d.state_of(name) == Some(State::Eligible) && d.cat.by_name(name).is_some_and(|c| c.kind == "chest");
             place && i.dungeon.is_some() && (chest || crate::gift_keys::spot(d, name))
         }
+        Some(i) if crate::hideout_keys::is_native(&w.locs[l].name) => crate::gerudo_drops::eligible(d, &i.name),
+        Some(i) if p.hideout != Keep::Vanilla && i.kind == "HideoutSmallKey" => {
+            let name: &str = &w.locs[l].name;
+            let dungeon: bool = w.regions[w.locs[l].region].dungeon.is_some();
+            let place: bool = match p.hideout {
+                Keep::AnyDungeon => dungeon,
+                _ => true,
+            };
+            let chest: bool = d.flow.by_name(name).is_none() && !d.special(name) && crate::slice::dungeon_items::chest_ok(d, name) && d.cat.by_name(name).is_some_and(|c| c.kind == "chest");
+            let gift: bool = crate::gift_keys::spot(d, name);
+            place && i.dungeon.is_some() && (chest || gift)
+        }
         Some(i) => {
             let name: &str = &w.locs[l].name;
             let up: bool = family_of(&i.tiers).is_some();
@@ -273,6 +285,8 @@ pub fn generate_data(d: &Data, s: &Settings, seed: &str, o: &GenOpts) -> Res<Gen
             && !(lay.is_some() && crate::shops::is_loc(&w.locs[*l].name))
             && !crate::slice::junk_spots::only(&p, &w.locs[*l].name)
             && !(p.silver && crate::slice::silver::is_spot(&w.locs[*l].name))
+            // Native guard drops are now shuffled checks; their vanilla key moves into the pool.
+            && !crate::hideout_keys::is_native(&w.locs[*l].name)
             // The Light Arrows Cutscene holds Ganon's Boss Key in this mode; its Light Arrows join the pool.
             && !(p.keys.ganon == Keep::Lacs && w.locs[*l].name == crate::lacs_key::LOC)
         {
@@ -324,7 +338,7 @@ pub fn generate_data(d: &Data, s: &Settings, seed: &str, o: &GenOpts) -> Res<Gen
         loop {
             let quick: bool = p.songs == Songs::Anywhere && redo + 1 < crate::slice::song_spots::TRIES;
             let (tries, switch): (u32, u32) = if quick { (o.tries.min(crate::slice::song_spots::QUICK_TRIES), o.switch.min(crate::slice::song_spots::QUICK_SWITCH)) } else { (o.tries, o.switch) };
-            let g: Placement = match fill_ordered(&w, &base, &pk.free, ok, order, &mut rng, tries, &fixed, !p.keys_roam() && gates.is_none(), r, reach, switch, &watch) {
+            let g: Placement = match fill_ordered(&w, &base, &pk.free, ok, order, &mut rng, tries, &fixed, !p.keys_roam() && p.hideout == Keep::Vanilla && gates.is_none(), r, reach, switch, &watch) {
                 Ok(g) => g,
                 Err(_) if quick => {
                     redo += 1;

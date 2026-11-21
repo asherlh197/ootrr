@@ -26,7 +26,10 @@ fn gone_kinds(p: &Plan) -> Vec<&'static str> {
 }
 
 pub fn active(p: &Plan) -> bool {
-    p.open.beans || !gone_kinds(p).is_empty() || p.kit.take.iter().any(|t| t.strip != Strip::Keep && t.count > 0)
+    p.hideout != Keep::Vanilla
+        || p.open.beans
+        || !gone_kinds(p).is_empty()
+        || p.kit.take.iter().any(|t| t.strip != Strip::Keep && t.count > 0)
 }
 
 fn kind_of<'a>(d: &'a Data, w: &World, it: ItemId) -> &'a str {
@@ -143,6 +146,8 @@ pub fn base(d: &Data, w: &World, p: &Plan, vanilla: &Placement, free: &[LocId]) 
     for t in p.kit.take.iter().filter(|t| t.strip != Strip::Keep && t.count > 0) {
         strip_one(&c, t, &mut out, &mut notes)?;
     }
+    // The four native guard drops are shuffled checks (gerudo_drops::add_checks), so their vanilla
+    // Hideout keys are already in the pool. Never add more keys than exist.
     Ok((out, notes))
 }
 
@@ -245,6 +250,22 @@ mod tests {
                     for x in ["Progressive Hookshot", "Boomerang", "Megaton Hammer", "Lens of Truth", "Bomb Bag", "Bow", "Progressive Strength Upgrade"] {
                         assert!(!g.seed_file.placements.values().any(|v| v == x), "{tag} {n} still places {x}");
                     }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn hideout_keys_never_exceed_four_in_a_seed() {
+        let d: Data = Data::load().unwrap();
+        for shuffle in ["vanilla", "any_dungeon", "keysanity"] {
+            let s: Settings = with(&[("shuffle_hideoutkeys", Value::s(shuffle)), ("gerudo_fortress", Value::s("open"))]);
+            for n in 0..3 {
+                let g = beatable(&d, &s, &format!("hideout count {shuffle} {n}"));
+                let keys: usize = g.seed_file.placements.values().filter(|v| v.as_str() == "Small Key (Thieves Hideout)").count();
+                assert!(keys <= 4, "{shuffle} {n} has {keys} Hideout keys, more than the four that exist");
+                if shuffle != "vanilla" {
+                    assert_eq!(keys, 4, "{shuffle} {n} has {keys} Hideout keys, expected four in the shuffled pool");
                 }
             }
         }

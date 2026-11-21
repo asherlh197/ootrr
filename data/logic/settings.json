@@ -213,6 +213,7 @@
   "shuffle_expensive_merchants": false,
   "shuffle_ganon_bosskey": "vanilla",
   "shuffle_gerudo_fortress_heart_piece": "vanilla",
+  "shuffle_hideoutkeys": "vanilla",
   "shuffle_hideout_entrances": false,
   "shuffle_individual_ocarina_notes": false,
   "shuffle_interior_entrances": false,

@@ -5,7 +5,7 @@ use crate::error::Res;
 use crate::romfs::Romfs;
 use crate::settings::seed::SeedFile;
 use crate::slice::data::Data;
-use crate::slice::support::{Plan, Songs};
+use crate::slice::support::{Keep, Plan, Songs};
 use crate::staging::Out;
 
 pub struct Ctx<'a> {
@@ -26,7 +26,7 @@ pub struct Ctx<'a> {
 
 pub type Stage = fn(&mut Romfs, &Ctx, &mut Vec<Out>) -> Res<()>;
 
-pub const STAGES: [(&str, Stage); 26] = [
+pub const STAGES: [(&str, Stage); 27] = [
     ("boss heart chests", boss_hearts),
     ("songs", songs),
     ("song models", song_models),
@@ -50,6 +50,7 @@ pub const STAGES: [(&str, Stage); 26] = [
     ("starting items", start_items),
     ("dpad items", dpad),
     ("pot rows", pot_rows),
+    ("hideout drop rows", hideout_drop_rows),
     ("start defaults", start_defaults),
     ("scrub rows", scrub_rows),
     ("debug location names", debug_names),
@@ -210,6 +211,10 @@ fn pot_rows(rf: &mut Romfs, c: &Ctx, more: &mut Vec<Out>) -> Res<()> {
         more.push(crate::pot_slice::kf_ring::stage(rf)?);
     }
     crate::pot_slice::rows::stage(rf, more, c.pots)
+}
+
+fn hideout_drop_rows(rf: &mut Romfs, c: &Ctx, more: &mut Vec<Out>) -> Res<()> {
+    crate::hideout_keys::stage_rows(rf, more, c.p.hideout != Keep::Vanilla)
 }
 
 fn start_defaults(rf: &mut Romfs, c: &Ctx, more: &mut Vec<Out>) -> Res<()> {
