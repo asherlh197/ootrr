@@ -16,6 +16,21 @@ pub fn replace(
     ok: &dyn Fn(ItemId, LocId) -> bool,
     notes: &mut Vec<String>,
 ) -> Res<()> {
+    replace_with(d, w, p, base, free, ok, notes, &[])
+}
+
+/// The same, plus rings named by plando that the settings did not select. Those rings are added
+/// over a junk or non-progress slot, leaving their dungeon's shuffled small keys in the pool.
+pub fn replace_with(
+    d: &Data,
+    w: &World,
+    p: &Plan,
+    base: &mut Placement,
+    free: &[LocId],
+    ok: &dyn Fn(ItemId, LocId) -> bool,
+    notes: &mut Vec<String>,
+    extra: &[&'static crate::key_rings::Ring],
+) -> Res<()> {
     if !p.rings {
         return Ok(());
     }
@@ -49,8 +64,21 @@ pub fn replace(
         base.put(at, ring);
         changes.push(format!("{} ({} keys)", r.dungeon, r.count));
     }
+    for r in extra {
+        if p.active_rings.contains(r) {
+            continue;
+        }
+        let ring: ItemId = w.item(r.item).ok_or_else(|| E::Msg(format!("{} is not in the logic item list", r.item)))?;
+        let at: LocId = free
+            .iter()
+            .copied()
+            .find(|l| ok(ring, *l) && base.get(*l).is_some_and(|i| i == junk || d.item(&w.items.names[i]).is_some_and(|it| !it.adv)))
+            .ok_or_else(|| E::Msg(format!("key rings: no free spot can hold the plandoed {}", r.item)))?;
+        base.put(at, ring);
+        changes.push(format!("{} ({} keys, plandoed)", r.dungeon, r.count));
+    }
     notes.push(format!(
-        "Each standard dungeon's small keys were replaced by one key ring: {}. The former key slots hold {JUNK} unless one holds its ring.",
+        "Each standard dungeon's small keys were replaced by one key ring: {}. The former key slots hold {JUNK} unless one holds its ring. A ring named by plando keeps its dungeon's small keys shuffled.",
         changes.join(", ")
     ));
     Ok(())

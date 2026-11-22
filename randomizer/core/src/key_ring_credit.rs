@@ -1,18 +1,16 @@
 //! Gives every small key of a dungeon when its key ring is picked up.
 //!
-//! Every item get ends by calling into `ActionGuide`. The credit checks are hung off the two
-//! `ActionGuide` entries used by item gets and shops, after the get flow has added the ring to the
-//! pouch and written its saved `IsGet` bool. Checking at the pouch add itself read the previous
-//! pickup's flag and credited one pickup late. Each held ring adds its dungeon's full `SmallKeyNum`
-//! and `SmallKeyTotalNum` once, guarded by a saved applied flag, then names the dungeon. The `IsGet`
-//! struct also gets one member per ring actor, so the game's own pouch add records that saved bool
-//! for a generated actor it has never heard of.
-//!
-//! Chests use their own `GetEventName` credit (crate::dungeon_credit) and gift scenes use
-//! crate::gift_keys, because neither goes through the shared get flows. Their applied flags keep
-//! these deferred checks from crediting the same ring twice.
+//! World pickups add their actor before calling `ActionGuide`, and the get flow has written its
+//! saved `IsGet` bool by then. The credit checks therefore run in a separate entry of the
+//! `ActionGuide` flow that only the two world-pickup get flows call. Chests and gifts keep calling
+//! the ordinary entry, so no ring check can interrupt their get demo or steal their credit. Shops
+//! keep their own entry. Each held ring adds its dungeon's full `SmallKeyNum` and `SmallKeyTotalNum`
+//! once, guarded by a saved applied flag, then names the dungeon. The `IsGet` struct also gets one
+//! member per ring actor, so the game's own pouch add records that saved bool for a generated actor
+//! it has never heard of.
 
-use crate::bfevfl::{Bf, Case, Cont, Event, Flow, Kind, Val};
+use crate::bfevfl::flow::NONE;
+use crate::bfevfl::{Bf, Case, Cont, Entry, Event, Flow, Kind, Val};
 use crate::byml::{Byml, Node};
 use crate::chest_slot::LIST;
 use crate::error::{Error as E, Res};
@@ -23,9 +21,14 @@ use crate::zs;
 
 const PREFIX: &str = "OOTRRKeyRing";
 const FLOW: &str = "ActionGuide";
-/// The no-tutorials patch leaves these two call sites for the ring checks. Both run after the item
-/// has been added to the pouch: one for ordinary gets (pots, crates, ground spots) and one for shops.
-const CALLS: [(&str, &str); 2] = [("ActionGuide", "OOTRRRingCallItemGet"), ("ActionGuideForShop", "OOTRRRingCallForShop")];
+/// A separate entry for world pickups. The get flows used by pots, crates and ground spots call it;
+/// chests and gifts keep calling the untouched `ActionGuide` entry.
+const WORLD_ENTRY: &str = "OOTRRRingWorld";
+const SHOP_ENTRY: &str = "ActionGuideForShop";
+const GET_ENTRY: &str = "ActionGuide";
+const WAIT_ACTOR: &str = "EventSystemActor";
+const WAIT_ACT: &str = "EventWait";
+const TRUE: u32 = 0x8000_0001;
 const HOLDER: &str = "GameDataActor";
 const ASK_BOOL: &str = "EventQueryIsGameDataBool";
 const ADD: &str = "EventTriggerAddOrSubGameDataInt";
@@ -117,29 +120,30 @@ fn ring(f: &mut Flow, r: &'static crate::key_rings::Ring, next: u16) -> Res<u16>
     push(f, asked)
 }
 
-/// Hangs the ring checks off the two `ActionGuide` call sites the no-tutorials patch leaves. Each
-/// chain is built in reverse, so an unmatched or already credited ring falls through to the call's
-/// one-frame wait. The entries start at the new chains instead of at the waits.
+/// Builds one ring-check chain ending at a one-frame wait. The chain is shared by the world-pickup
+/// entry and the shop entry; the ordinary item-get entry is deliberately left alone.
 pub fn patch(f: &mut Flow) -> Res<()> {
     if f.events.iter().any(|e| e.name.starts_with(PREFIX)) {
         return Ok(());
     }
-    for (entry_name, call_name) in CALLS {
-        let call: usize = f.events.iter().position(|e| e.name == call_name).ok_or_else(|| E::Msg(format!("key rings: no {call_name} event in the {FLOW} flow")))?;
-        if !matches!(f.events[call].kind, Kind::Action { .. }) {
-            return Err(E::Msg(format!("key rings: {call_name} is not an action, the game files differ")));
-        }
-        let wait: u16 = idx(call)?;
-        let entry: &crate::bfevfl::Entry = f.entries.iter().find(|e| e.name == entry_name).ok_or_else(|| E::Msg(format!("key rings: no {entry_name} entry in the {FLOW} flow")))?;
-        if entry.main != wait {
-            return Err(E::Msg(format!("key rings: {entry_name} does not start at {call_name}, the game files differ")));
-        }
-        let mut first: u16 = wait;
-        for r in crate::key_rings::RINGS.iter().rev() {
-            first = ring(f, r, first)?;
-        }
-        f.entries.iter_mut().find(|e| e.name == entry_name).unwrap().main = first;
+    let template: &crate::bfevfl::Entry = f.entries.iter().find(|e| e.name == GET_ENTRY).ok_or_else(|| E::Msg(format!("key rings: no {GET_ENTRY} entry in the {FLOW} flow")))?;
+    let pad: u16 = template.pad;
+    let (a, x): (u16, u16) = crate::start_state::slot(f, WAIT_ACTOR, WAIT_ACT)?;
+    let wait: u16 = push(f, Kind::Action {
+        next: NONE,
+        actor: a,
+        act: x,
+        params: Some(Cont {
+            items: vec![("IsWaitEnd".to_string(), Val::Bool(TRUE)), ("Frames".to_string(), Val::Int(1))],
+        }),
+    })?;
+    let mut first: u16 = wait;
+    for r in crate::key_rings::RINGS.iter().rev() {
+        first = ring(f, r, first)?;
     }
+    f.entries.push(Entry { name: WORLD_ENTRY.to_string(), subs: Vec::new(), vars: Vec::new(), main: first, pad });
+    let shop: &mut crate::bfevfl::Entry = f.entries.iter_mut().find(|e| e.name == SHOP_ENTRY).ok_or_else(|| E::Msg(format!("key rings: no {SHOP_ENTRY} entry in the {FLOW} flow")))?;
+    shop.main = first;
     Ok(())
 }
 
@@ -148,10 +152,38 @@ pub fn patch_bf(b: &mut Bf) -> Res<()> {
     patch(f)
 }
 
-/// Stages the credit on top of the no-tutorials patch. It reads the file that stage already wrote
-/// into the mod's work folder, so the ring checks keep the two separate item-get call sites.
+/// Points a world-pickup flow's `ActionGuide` sub call at the ring-checked entry.
+fn redirect(f: &mut Flow, file: &str) -> Res<usize> {
+    let mut n: usize = 0;
+    for e in &mut f.events {
+        if let Kind::Sub { entry, flow, .. } = &mut e.kind
+            && flow == FLOW
+            && entry == GET_ENTRY
+        {
+            *entry = WORLD_ENTRY.to_string();
+            n += 1;
+        }
+    }
+    if n != 1 {
+        return Err(E::Msg(format!("key rings: {file} calls {FLOW}:{GET_ENTRY} {n} times, expected once")));
+    }
+    Ok(n)
+}
+
+pub fn redirect_bf(b: &mut Bf, file: &str) -> Res<()> {
+    let f: &mut Flow = b.flows.iter_mut().find(|x| x.name == file).ok_or_else(|| E::Msg(format!("key rings: no {file} flow")))?;
+    redirect(f, file)?;
+    Ok(())
+}
+
+/// Stages the credit on top of the no-tutorials patch. The new entry lives in the `ActionGuide`
+/// flow; only the two world-pickup get flows are redirected to it, leaving chests and gifts alone.
 pub fn stage_flows(rf: &mut Romfs, late: &mut Vec<Out>, work: &std::path::Path) -> Res<()> {
-    crate::story_skip::stage_late(rf, late, work, FLOW, patch_bf)
+    crate::story_skip::stage_late(rf, late, work, FLOW, patch_bf)?;
+    for file in ["Dm_SY_Get", "Dm_SY_Get_WithoutPlayer"] {
+        crate::story_skip::stage_late(rf, late, work, file, |b| redirect_bf(b, file))?;
+    }
+    Ok(())
 }
 
 fn flag_pairs() -> Vec<(String, u32)> {
@@ -314,11 +346,15 @@ mod tests {
         }
     }
 
-    fn calls() -> [(u16, &'static str, &'static str, &'static str); 2] {
-        [
-            (1, "ActionGuide", "OOTRRRingCallItemGet", "the item get"),
-            (2, "ActionGuideForShop", "OOTRRRingCallForShop", "the shop get"),
-        ]
+    fn entries() -> [(&'static str, &'static str); 2] {
+        [(WORLD_ENTRY, "the world pickup"), (SHOP_ENTRY, "the shop get")]
+    }
+
+    fn guide_wait(f: &Flow) -> usize {
+        f.events
+            .iter()
+            .position(|e| matches!(&e.kind, Kind::Action { params: Some(c), .. } if c.get("Frames") == Some(&Val::Int(1)) && c.get("IsWaitEnd") == Some(&Val::Bool(TRUE))))
+            .expect("the ring chain has a one-frame wait")
     }
 
     fn action_guide() -> Flow {
@@ -347,19 +383,19 @@ mod tests {
     }
 
     #[test]
-    fn every_item_get_checks_each_held_ring_before_its_guide_wait() {
+    fn only_world_and_shop_gets_check_each_held_ring_before_their_guide_wait() {
         let mut f: Flow = action_guide();
         patch(&mut f).unwrap();
-        for (wait, entry_name, call_name, label) in calls() {
+        let wait: usize = guide_wait(&f);
+        for (entry_name, label) in entries() {
             let entry: &Entry = f.entries.iter().find(|e| e.name == entry_name).unwrap();
             let mut at: usize = entry.main as usize;
-            assert_ne!(at, wait as usize, "{label} starts at the ring checks, not the wait");
-            assert_eq!(f.events[wait as usize].name, call_name);
+            assert_ne!(at, wait, "{label} starts at the ring checks, not the wait");
             let mut applied_seen: BS<String> = BS::new();
             let mut held_seen: BS<String> = BS::new();
             let mut reached_wait: bool = false;
             for _ in 0..f.events.len() {
-                if at == wait as usize {
+                if at == wait {
                     reached_wait = true;
                     break;
                 }
@@ -388,10 +424,40 @@ mod tests {
             assert!(applied_seen.contains(&crate::key_rings::applied_flag("ForestTemple")));
             assert!(held_seen.contains(&crate::key_rings::got_flag("Item_Ring_Forest")));
         }
+        let ordinary: &Entry = f.entries.iter().find(|e| e.name == GET_ENTRY).unwrap();
+        assert_eq!(ordinary.main, 1, "chests and gifts keep the untouched item-get entry");
         assert!(f.events.iter().any(|e| e.name.starts_with(PREFIX)));
         let before: Flow = f.clone();
         patch(&mut f).unwrap();
         assert_eq!(f, before, "the credit is added once");
+    }
+
+    #[test]
+    fn only_the_world_get_flows_call_the_checked_entry() {
+        let sub = |flow: &str, entry: &str| Event {
+            name: format!("call {flow} {entry}"),
+            kind: Kind::Sub { next: NONE, params: None, flow: flow.to_string(), entry: entry.to_string() },
+        };
+        let mut b: Bf = Bf {
+            ver: [0, 4, 0, 0],
+            bom: 0xFEFF,
+            shift: 3,
+            pad: 0,
+            name: "flow".to_string(),
+            tls: Vec::new(),
+            flows: vec![Flow {
+                name: "Dm_SY_Get".to_string(),
+                actors: Vec::new(),
+                events: vec![sub(FLOW, GET_ENTRY), sub("Other", GET_ENTRY)],
+                entries: Vec::new(),
+            }],
+        };
+        redirect_bf(&mut b, "Dm_SY_Get").unwrap();
+        let Kind::Sub { entry, .. } = &b.flows[0].events[0].kind else { panic!("sub") };
+        assert_eq!(entry, WORLD_ENTRY, "the world pickup calls the checked entry");
+        let Kind::Sub { entry, .. } = &b.flows[0].events[1].kind else { panic!("sub") };
+        assert_eq!(entry, GET_ENTRY, "other callers are left alone");
+        assert!(redirect_bf(&mut b, "Dm_SY_Get").is_err(), "a second redirect is refused");
     }
 
     #[test]
@@ -400,11 +466,12 @@ mod tests {
         patch(&mut f).unwrap();
         let forest: &crate::key_rings::Ring = crate::key_rings::by_folder("ForestTemple").unwrap();
         let applied: String = crate::key_rings::applied_flag(forest.folder);
-        let (wait, entry_name, _, _) = calls()[0];
+        let wait: usize = guide_wait(&f);
+        let entry_name: &str = WORLD_ENTRY;
         let mut at: usize = f.entries.iter().find(|e| e.name == entry_name).unwrap().main as usize;
         let mut credit: Option<u16> = None;
         for _ in 0..f.events.len() {
-            if at == wait as usize {
+            if at == wait {
                 break;
             }
             let e: &Event = &f.events[at];
@@ -447,7 +514,7 @@ mod tests {
                             writes.insert(name.clone(), v);
                         }
                     }
-                    if *next == wait {
+                    if usize::from(*next) == wait {
                         break;
                     }
                     at = *next as usize;

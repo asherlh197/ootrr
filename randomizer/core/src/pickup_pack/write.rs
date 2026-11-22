@@ -117,9 +117,10 @@ pub(crate) fn tables(rf: &mut Romfs, o: &Opts, modded: bool, s: &Spec, l: &Layer
             crate::pickup_pack::model::row(&mut r, rows::need(y, m, ACTOR_INFO)?)?;
         }
         if l.ring.is_some() {
-            // A ring keeps the small key's model row but answers to its saved key-item identity
-            // and uses the medallion's effect link user. The drop actor's pack name is only its
-            // world body; the pouch and the get flow know the ring by this identity.
+            // A ring keeps the small key's model row but answers to its saved key-item identity,
+            // so the generic world get flow records the `IsGet` bool the credit checks read. The
+            // drop actor's pack name is only its world body; the pouch and get flow know the ring
+            // by this identity.
             r.set("ActorName", Node::Str(identity.to_string()));
             if let Some(elink) = l.pouch_from.as_deref() {
                 r.set("ELinkUserName", Node::Str(elink.to_string()));

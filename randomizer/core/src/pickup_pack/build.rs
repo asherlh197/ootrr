@@ -51,6 +51,9 @@ pub fn plan_with_files(packs: &[Vec<Entry>], s: &Spec, l: &Layers, extra: &[(Str
     }
     let mut p: Pool = pool_of(packs)?;
     let peers: Vec<(String, usize)> = p.files.iter().map(|e| (e.0.clone(), e.1.len())).collect();
+    // Hand made extras such as a ring's get-event AINB are binary by design. Only the files
+    // inherited from the game's actor packs still have to be parameter files.
+    let made: BS<&str> = extra.iter().map(|(f, _)| f.as_str()).collect();
     let m: Made = make_with(&p, s, l)?;
     // Event-form rings are key items with no ground check. Drop-form rings are world pickups and
     // need the same lift as every other pickup that turns in place.
@@ -68,7 +71,7 @@ pub fn plan_with_files(packs: &[Vec<Entry>], s: &Spec, l: &Layers, extra: &[(Str
     let files: Vec<String> = select_with(&p, &s.name, &carry)?;
     // Only the files the new pickup reaches go into its pack; a graph file the item's own pack
     // carries (its AI) is never reached through the thin template.
-    if let Some(f) = files.iter().find(|f| p.get(f).is_some_and(|d| !is_byml(d))) {
+    if let Some(f) = files.iter().find(|f| !made.contains(f.as_str()) && p.get(f).is_some_and(|d| !is_byml(d))) {
         return Err(E::Msg(format!("{f} is not a parameter file, an item whose pack carries graph or binary files needs a hand made template")));
     }
     if let Some((f, _)) = fresh.iter().find(|f| !files.contains(&f.0)) {

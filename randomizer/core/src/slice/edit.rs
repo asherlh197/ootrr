@@ -520,9 +520,8 @@ pub fn build_with(seed: &SeedFile, romfs: &P, load: &P, mod_name: &str, host: Ho
     crate::starter_bags::stage(&mut rf, &mut late, &work)?;
     // Rooms that could lock Link in once their item is shuffled away (crate::dungeon_fixes).
     crate::dungeon_fixes::stage(&mut rf, &mut late, &work)?;
-    // Every item get calls ActionGuide after the pouch add, so credit a held ring there instead of
-    // at the add itself: the saved IsGet bool is current by then. After this, all three give paths
-    // (chest, gift and pickup) write the same key counts.
+    // World pickups call a separate, ring-checked ActionGuide entry after the pouch add, so the
+    // saved IsGet bool is current without putting ring checks in the chest and gift item-get path.
     if p.rings {
         crate::key_ring_credit::stage_flows(&mut rf, &mut late, &work)?;
     }

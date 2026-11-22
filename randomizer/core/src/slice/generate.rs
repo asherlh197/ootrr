@@ -273,14 +273,29 @@ pub fn generate_data(d: &Data, s: &Settings, seed: &str, o: &GenOpts) -> Res<Gen
     let watch: Watch = Watch::new(o.limit, o.live.clone());
     let mut p: Plan = plan_with_seed(s, Some(seed))?;
     p.notes.extend(p.trials.note());
+    // A plando entry can name a ring the settings did not select. Add its logic flag for this seed
+    // only, so the item exists for the plando resolver without changing the saved settings string or
+    // turning its dungeon's shuffled small keys into junk.
+    let mut logic: Vec<(&'static str, &'static str)> = p.logic();
+    let mut extra_rings: Vec<&'static crate::key_rings::Ring> = Vec::new();
+    if p.rings {
+        for e in &o.plando {
+            if let Some(r) = crate::key_rings::by_item(&e.item) {
+                logic.push((r.select, "true"));
+                if !p.active_rings.contains(&r) && !extra_rings.contains(&r) {
+                    extra_rings.push(r);
+                }
+            }
+        }
+    }
     let room: crate::shops::layout::Room = crate::shops::rules::room(d, &p)?;
     let mut lay: Option<crate::shops::Layout> = crate::shops::layout::of(&p.shops, seed, room)?;
     p.notes.extend(lay.as_ref().and_then(|l| crate::shops::rules::cut_note(l.cut, room)));
     let owned: Option<Data> = lay.as_ref().map(|l| crate::shops::logic::data_with(d, l)).transpose()?;
     let d: &Data = owned.as_ref().unwrap_or(d);
     let mut w: World = match &lay {
-        Some(l) => crate::shops::logic::world(d, &p.logic(), l)?,
-        None => world_with(d, &p.logic())?,
+        Some(l) => crate::shops::logic::world(d, &logic, l)?,
+        None => world_with(d, &logic)?,
     };
     let mut named: Vec<String> = Vec::with_capacity(p.excluded.len());
     for e in &p.excluded {
@@ -304,7 +319,7 @@ pub fn generate_data(d: &Data, s: &Settings, seed: &str, o: &GenOpts) -> Res<Gen
     let mut ring_notes: Vec<String> = Vec::new();
     {
         let ok = |it: ItemId, l: LocId| allowed(d, &w, &p, it, l);
-        crate::slice::rings::replace(d, &w, &p, &mut base, &pk.free, &ok, &mut ring_notes)?;
+        crate::slice::rings::replace_with(d, &w, &p, &mut base, &pk.free, &ok, &mut ring_notes, &extra_rings)?;
     }
     p.notes.extend(ring_notes);
     let ex: Vec<String> = check_excluded(&w, &p, &pk.free, &base)?;
