@@ -1048,4 +1048,16 @@ mod tests {
             }
         }
     }
+
+    #[test]
+    fn every_builtin_preset_generates_a_seed() {
+        let mut bad: Vec<String> = Vec::new();
+        for pr in crate::settings::presets::builtin().unwrap() {
+            let s: Settings = pr.apply(&Settings::default()).unwrap();
+            if let Err(e) = crate::slice::generate::generate(&s, "preset check") {
+                bad.push(format!("{}: {e}", pr.id));
+            }
+        }
+        assert!(bad.is_empty(), "{}", bad.join("\n"));
+    }
 }
