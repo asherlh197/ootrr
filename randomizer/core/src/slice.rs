@@ -39,6 +39,7 @@ pub mod pickups;
 pub mod plando;
 pub mod remake_chests;
 pub mod remake_overworld;
+pub mod rings;
 pub mod scan;
 pub mod seed_packs;
 pub mod silver;

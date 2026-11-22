@@ -141,11 +141,16 @@ pub fn chain(p: &Pool, actor: &str) -> Res<Chain> {
     Ok(Chain { files, comps })
 }
 
-pub fn select(p: &Pool, actor: &str) -> Res<Vec<String>> {
+/// A ring's generated actor replaces its parent's event performer, so `select` would drop the
+/// parent's `PouchContent` parameter file. The working key-ring pack carries both: the game keeps
+/// the parent performer around even when the child names its own. Extra roots let a caller keep
+/// those replaced parts without changing the closure of every other actor.
+pub fn select_with(p: &Pool, actor: &str, extra: &[String]) -> Res<Vec<String>> {
     let c: Chain = chain(p, actor)?;
     let mut seen: BS<String> = c.files.iter().cloned().collect();
     let mut todo: Vec<String> = Vec::new();
     let mut found: Vec<String> = c.comps.values().cloned().collect();
+    found.extend(extra.iter().cloned());
     loop {
         for s in found.drain(..) {
             let Some(t) = norm(&s) else {
@@ -165,6 +170,10 @@ pub fn select(p: &Pool, actor: &str) -> Res<Vec<String>> {
         }
     }
     Ok(seen.into_iter().collect())
+}
+
+pub fn select(p: &Pool, actor: &str) -> Res<Vec<String>> {
+    select_with(p, actor, &[])
 }
 
 pub fn dangling(p: &Pool, files: &[String], known: &BS<String>) -> Res<Vec<String>> {
@@ -280,6 +289,13 @@ mod tests {
             "Phive/Set.bgyml",
         ];
         assert_eq!(got, want);
+    }
+
+    #[test]
+    fn extra_roots_keep_a_part_the_child_replaced() {
+        let got: Vec<String> = select_with(&pool(), "Kid", &["?Component/ModelInfo/Dummy.bgyml".to_string()]).unwrap();
+        assert!(got.contains(&"Component/ModelInfo/Dummy.bgyml".to_string()));
+        assert!(got.contains(&"Component/ModelInfo/Kid.bgyml".to_string()));
     }
 
     #[test]

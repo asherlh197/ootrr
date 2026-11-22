@@ -71,9 +71,26 @@ pub fn spec(d: &Data, over: &[(&str, &str)]) -> Res<Spec> {
     // condition. Otherwise they are not progress, so the fill may put them where the logic never
     // goes (a Piece of Heart behind a bean spot nobody can plant).
     let hearts: bool = HEART_GOALS.iter().any(|k| s.settings.get(k) == Some(&Val::Str("hearts".to_string())));
+    let rings: bool = s.settings.flag(crate::key_rings::SETTING);
+    let chosen_rings: Vec<&'static crate::key_rings::Ring> = if rings {
+        let picked: Vec<&'static crate::key_rings::Ring> = crate::key_rings::RINGS
+            .iter()
+            .filter(|r| s.settings.flag(r.select))
+            .collect();
+        // Callers that only pass the old master flag still get the original all-8 behavior.
+        if picked.is_empty() { crate::key_rings::RINGS.iter().collect() } else { picked }
+    } else {
+        Vec::new()
+    };
     for it in &d.items {
+        if crate::key_rings::by_item(&it.name).is_some() {
+            continue;
+        }
         let heart: bool = crate::slice::generate::HEARTS.iter().any(|h| it.name.starts_with(h));
         s.add_item(&it.name, it.adv && (hearts || !heart), 0);
+    }
+    for r in chosen_rings {
+        s.add_ring(r.item, r.key, r.count);
     }
     s.add_helpers(HELPERS)?;
     let mut files: Vec<Json> = Vec::new();

@@ -1,8 +1,10 @@
 use std::collections::BTreeSet as BS;
 
 use crate::error::{Error as E, Res};
-use crate::pickup_pack::actor::{make_with, Made};
-use crate::pickup_pack::closure::{chain, dangling_with, is_byml, select, Chain, Pool};
+use crate::pickup_pack::actor::{make_with, Made, EVENT_REF};
+use crate::pickup_pack::closure::{chain, dangling_with, is_byml, select_with, Chain, Pool};
+#[cfg(test)]
+use crate::pickup_pack::closure::select;
 use crate::pickup_pack::{is_actor_name, Layers, Spec};
 use crate::sarc::{self, Entry};
 
@@ -24,27 +26,46 @@ pub fn pool_of(packs: &[Vec<Entry>]) -> Res<Pool> {
     Ok(p)
 }
 
+/// Parts the actor's merged component chain replaces but the pack still needs. A ring's own get
+/// performer hides the event-object parent's plain PouchContent performer; the working key-ring
+/// pack carries both, and the audit has to follow the same closure.
+pub fn extra_roots(p: &Pool, l: &Layers) -> Res<Vec<String>> {
+    if l.ring.is_none() || l.drop_ring {
+        return Ok(Vec::new());
+    }
+    let base: Chain = chain(p, crate::pickup_pack::actor::EVENT_BASE)?;
+    Ok(base.comps.get(EVENT_REF).cloned().into_iter().collect())
+}
+
 pub fn plan(packs: &[Vec<Entry>], s: &Spec) -> Res<Plan> {
     plan_with(packs, s, &Layers::default())
 }
 
 pub fn plan_with(packs: &[Vec<Entry>], s: &Spec, l: &Layers) -> Res<Plan> {
-    if !is_actor_name(&s.name) || !is_actor_name(&s.item) {
-        return Err(E::Msg(format!("{} or {} is not a plain actor name", s.name, s.item)));
+    plan_with_files(packs, s, l, &[])
+}
+
+pub fn plan_with_files(packs: &[Vec<Entry>], s: &Spec, l: &Layers, extra: &[(String, Vec<u8>)]) -> Res<Plan> {
+    if !is_actor_name(&s.name) || !is_actor_name(&s.item) || !is_actor_name(s.source()) || s.identity.as_deref().is_some_and(|id| !is_actor_name(id)) {
+        return Err(E::Msg(format!("{}, {} or an override is not a plain actor name", s.name, s.item)));
     }
     let mut p: Pool = pool_of(packs)?;
     let peers: Vec<(String, usize)> = p.files.iter().map(|e| (e.0.clone(), e.1.len())).collect();
     let m: Made = make_with(&p, s, l)?;
-    let m: Made = if l.spin { crate::pickup_pack::lift::ground(&p, m, &s.name, l.lift)? } else { m };
+    // Event-form rings are key items with no ground check. Drop-form rings are world pickups and
+    // need the same lift as every other pickup that turns in place.
+    let lifted: bool = l.spin && (l.ring.is_none() || l.drop_ring);
+    let m: Made = if lifted { crate::pickup_pack::lift::ground(&p, m, &s.name, l.lift)? } else { m };
     let mut fresh: Vec<(String, usize)> = Vec::new();
-    for (f, d) in [&m.actor, &m.pouch].into_iter().chain(m.extra.iter()) {
+    for (f, d) in [&m.actor, &m.pouch].into_iter().chain(m.extra.iter()).chain(extra.iter()) {
         if p.get(f).is_some() {
             return Err(E::Msg(format!("{f} already exists, {} is taken", s.name)));
         }
         p.add(f, d)?;
         fresh.push((f.clone(), d.len()));
     }
-    let files: Vec<String> = select(&p, &s.name)?;
+    let carry: Vec<String> = extra_roots(&p, l)?;
+    let files: Vec<String> = select_with(&p, &s.name, &carry)?;
     // Only the files the new pickup reaches go into its pack; a graph file the item's own pack
     // carries (its AI) is never reached through the thin template.
     if let Some(f) = files.iter().find(|f| p.get(f).is_some_and(|d| !is_byml(d))) {
@@ -219,7 +240,7 @@ mod tests {
         };
         let mut rf: Romfs = Romfs::open(&root).unwrap();
         let src: Vec<Vec<Entry>> = vec![load(&mut rf, BASE), load(&mut rf, DONOR), load(&mut rf, "Item_Hookshot")];
-        let s: Spec = Spec { item: "Item_Hookshot".to_string(), name: "Obj_Hookshot".to_string(), style: Style::Touch, heap: None };
+        let s: Spec = Spec { item: "Item_Hookshot".to_string(), name: "Obj_Hookshot".to_string(), style: Style::Touch, heap: None, source: None, identity: None };
         let pl: Plan = plan(&src, &s).unwrap();
         let base: BS<String> = src[0].iter().map(|e| e.name.clone()).collect();
         let got: BS<String> = pl.files.iter().cloned().collect();
@@ -274,7 +295,7 @@ mod tests {
 
     fn pouch_of(rf: &mut Romfs, item: &str, name: &str) -> (Plan, Option<String>, Option<String>) {
         let src: Vec<Vec<Entry>> = vec![load(rf, BASE), load(rf, DONOR), load(rf, item)];
-        let s: Spec = Spec { item: item.to_string(), name: name.to_string(), style: Style::Touch, heap: None };
+        let s: Spec = Spec { item: item.to_string(), name: name.to_string(), style: Style::Touch, heap: None, source: None, identity: None };
         let pl: Plan = plan(&src, &s).unwrap();
         let back: Vec<Entry> = sarc::parse(&pl.sarc).unwrap();
         let q: Byml = Byml::parse(&sarc::get(&back, &pouch_file(name)).unwrap().data).unwrap();

@@ -9,7 +9,7 @@ use crate::error::{Error as E, Res};
 use crate::modpack::{Host, Pack};
 use crate::pickup_persist::Extra;
 use crate::placement::banc_files;
-use crate::progressive::{stage as stage_upgrades, Size};
+use crate::progressive::Size;
 use crate::romfs::Romfs;
 use crate::rsizetable::{self, Rst};
 use crate::settings::seed::SeedFile;
@@ -19,7 +19,7 @@ use crate::slice::banc::fingerprint;
 use crate::slice::data::Data;
 use crate::slice::flow_wrap::{grants as wrap_grants, wraps as flow_wraps};
 use crate::slice::pickups as pu;
-use crate::slice::support::plan;
+use crate::slice::support::plan_with_seed as plan;
 use crate::zs;
 
 pub use crate::slice::banc_edit::{Edited, edit_file, edit_file_with};
@@ -142,7 +142,7 @@ pub fn build_for(seed: &SeedFile, romfs: &P, load: &P, mod_name: &str, host: Hos
 pub fn build_with(seed: &SeedFile, romfs: &P, load: &P, mod_name: &str, host: Host, extra: &Extra) -> Res<Built> {
     let d: Data = Data::load()?;
     let loaded = seed.settings()?;
-    let p = plan(&loaded.settings)?;
+    let p = plan(&loaded.settings, Some(&seed.seed))?;
     let d: Data = crate::slice::treasure::with(d, p.treasure);
     let mut rf: Romfs = Romfs::open(romfs)?;
     let have: String = fingerprint(&rf, &d.scan.files)?;
@@ -216,7 +216,7 @@ pub fn build_with(seed: &SeedFile, romfs: &P, load: &P, mod_name: &str, host: Ho
             b
         });
         let raw: &[u8] = resized.as_deref().unwrap_or(&vanilla);
-        let e: Option<Edited> = edit_file_with(&f, raw, &ts, roam, &small_hearts, &lifts, &wrapped_chests)?;
+        let e: Option<Edited> = edit_file_with(&f, raw, &ts, roam || p.rings, &small_hearts, &lifts, &wrapped_chests)?;
         let e: Option<Edited> = match (e, &resized) {
             (Some(mut e), Some(_)) => {
                 e.old_len = vanilla.len();
@@ -298,8 +298,13 @@ pub fn build_with(seed: &SeedFile, romfs: &P, load: &P, mod_name: &str, host: Ho
     let placed: BM<String, &'static str> = flow_wraps(&d, seed);
     let chest_fams: BS<&str> = upgrades.iter().map(|u| u.0.as_str()).collect();
     let gs: Vec<crate::progressive::Grant> = wrap_grants(&d, seed, &chest_fams, &placed);
-    if !upgrades.is_empty() || roam || hideout || gr.active() || !passes.silver_used.is_empty() {
-        let mut outs: Vec<crate::staging::Out> = if !upgrades.is_empty() || roam || hideout { stage_upgrades(&mut rf, &upgrades, None, &kids, &keys)? } else { Vec::new() };
+    if !upgrades.is_empty() || roam || hideout || p.rings || gr.active() || !passes.silver_used.is_empty() {
+        let mut outs: Vec<crate::staging::Out> = if !upgrades.is_empty() || roam || hideout || p.rings {
+            let ring_folders: &[&'static str] = if p.rings { &crate::key_rings::FOLDERS } else { &[] };
+            crate::progressive::stage_with(&mut rf, &upgrades, None, &kids, &keys, ring_folders)?
+        } else {
+            Vec::new()
+        };
         crate::dungeon_grant::stage(&mut rf, &mut outs, &gr, &passes.marks.used)?;
         crate::slice::silver::stage(&mut rf, &mut outs, &passes.silver_used)?;
         scrub_rows = crate::scrubs_b::stage_rows(&mut rf, &scrub_jobs, &mut outs, false)?;
@@ -367,11 +372,11 @@ pub fn build_with(seed: &SeedFile, romfs: &P, load: &P, mod_name: &str, host: Ho
     }
     marked.extend(flow_cs.iter().chain(chest_cs.iter()).filter_map(|c| match c.item {
         crate::gift_keys::Item::Other(k) => Some((k, c.dungeon)),
-        crate::gift_keys::Item::Small => None,
+        crate::gift_keys::Item::Small | crate::gift_keys::Item::Ring(_) => None,
     }));
     marked.extend(key_cs.iter().filter_map(|c| match c.item {
         crate::gift_keys::Item::Other(k) => Some((k, c.dungeon)),
-        crate::gift_keys::Item::Small => None,
+        crate::gift_keys::Item::Small | crate::gift_keys::Item::Ring(_) => None,
     }));
     let c: crate::slice::stages::Ctx = crate::slice::stages::Ctx {
         d: &d,
@@ -515,6 +520,12 @@ pub fn build_with(seed: &SeedFile, romfs: &P, load: &P, mod_name: &str, host: Ho
     crate::starter_bags::stage(&mut rf, &mut late, &work)?;
     // Rooms that could lock Link in once their item is shuffled away (crate::dungeon_fixes).
     crate::dungeon_fixes::stage(&mut rf, &mut late, &work)?;
+    // Every item get calls ActionGuide after the pouch add, so credit a held ring there instead of
+    // at the add itself: the saved IsGet bool is current by then. After this, all three give paths
+    // (chest, gift and pickup) write the same key counts.
+    if p.rings {
+        crate::key_ring_credit::stage_flows(&mut rf, &mut late, &work)?;
+    }
     if p.short {
         crate::short_get::stage(&mut rf, &mut late, &work)?;
     }
@@ -1037,7 +1048,7 @@ mod tests {
             }
             // Every flow location takes every item: the build stages the choices in untested mode,
             // so a name no game flow hands out is listed as untested instead of refused.
-            let songs: bool = plan(&st).unwrap().songs != Songs::Off;
+            let songs: bool = plan(&st, None).unwrap().songs != Songs::Off;
             let (_, _, untested): (Vec<crate::flow_locations::Change>, usize, Vec<String>) =
                 crate::flow_locations::plan(&d.flow, &flows, &FlowOpts { songs, untested: true }).unwrap_or_else(|e| panic!("seed split {n}: {e}"));
             for c in &flows {

@@ -15,7 +15,7 @@ use crate::rsizetable::{Rst, TABLE_PATH};
 use crate::settings::seed::SeedFile;
 use crate::slice::data::Data;
 use crate::slice::edit::{build_with, Built};
-use crate::slice::key_spots::{resolve, shield, Pick};
+use crate::slice::key_spots::{resolve_at, shield, Pick};
 use crate::slice::tier_order::{fixed_actors, Verdict};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -77,8 +77,7 @@ pub fn need(d: &Data, seed: &SeedFile, fixed: &BM<String, String>) -> Res<BM<Str
         let Some(k) = kind_of(d, loc, item) else {
             continue;
         };
-        let found: Res<Pick> = if k.kit() { crate::slice::key_spots::resolve_kit(d, item, fixed.get(loc).map(|s| s.as_str())) } else { resolve(d, item, fixed.get(loc).map(|s| s.as_str())) };
-        let p: Pick = match found {
+        let p: Pick = match resolve_at(d, loc, item, fixed.get(loc).map(|s| s.as_str())) {
             Ok(p) => p,
             // A boss heart whose item has no pack keeps the chest it always had (crate::boss_heart).
             Err(_) if d.cat.by_name(loc).is_some_and(|l| l.kind == "bossheart") => continue,
@@ -93,6 +92,19 @@ pub fn need(d: &Data, seed: &SeedFile, fixed: &BM<String, String>) -> Res<BM<Str
     for (loc, p) in crate::ocarina_hold::wanted(d, seed) {
         let w: &mut Want = out.entry(p.pack.clone()).or_insert_with(|| Want { name: p.pack.clone(), pick: p, kind: Kind::Free, spots: Vec::new() });
         w.spots.push(loc);
+    }
+    // A ring is a generated actor, so even when it sits in a chest or is handed to Link its pack
+    // has to be written. World spots take the drop form; chests and gifts take the event form.
+    for (loc, item) in &seed.placements {
+        if crate::key_rings::by_item(item).is_none() {
+            continue;
+        }
+        let p: Pick = resolve_at(d, loc, item, fixed.get(loc).map(|s| s.as_str()))?;
+        let name: String = p.pack.clone();
+        let w: &mut Want = out.entry(name.clone()).or_insert_with(|| Want { name, pick: p, kind: Kind::Free, spots: Vec::new() });
+        if !w.spots.iter().any(|x| x == loc) {
+            w.spots.push(loc.clone());
+        }
     }
     for w in out.values() {
         w.spec()?;
@@ -285,6 +297,40 @@ mod tests {
         assert_eq!(both["Obj_Hammer"].spots.len(), 2);
         let shipped: SeedFile = seed(&[(pot.as_str(), "Fire Arrows")]);
         assert!(need(&d, &shipped, &BM::new()).unwrap().keys().all(|k| scene.iter().any(|x| x == k)));
+    }
+
+    #[test]
+    fn rings_are_written_as_packs_from_chests_gifts_pots_and_skulls() {
+        let d: Data = Data::load().unwrap();
+        let r: &'static crate::key_rings::Ring = &crate::key_rings::RINGS[0];
+        let pot: String = d.pots.state.iter().filter(|(n, s)| **s == crate::slice::data::State::Eligible && crate::slice::copies::copies(&d, n) < 2).map(|(n, _)| n.clone()).min().unwrap();
+        let free: &str = "LLR Freestanding PoH";
+        let chest: &str = "KF Midos Top Left Chest";
+        let gift: &str = "LW Gift from Saria";
+        let skull: &str = "KF GS Bean Patch";
+        let s: SeedFile = seed(&[(chest, r.item), (gift, r.item), (pot.as_str(), r.item), (free, r.item), (skull, r.item)]);
+        let fixed: BM<String, String> = [(skull.to_string(), r.actor.to_string())].into_iter().collect();
+        let w: BM<String, Want> = need(&d, &s, &fixed).unwrap();
+
+        let event: String = crate::key_rings::pack(r.actor);
+        let given: &Want = &w[&event];
+        for loc in [chest, gift] {
+            assert!(given.spots.contains(&loc.to_string()), "{loc} has no event ring pack");
+        }
+        assert_eq!(given.spec().unwrap().0.item, r.actor);
+
+        let drop: String = crate::key_rings::drop_pack(r.actor);
+        let world: &Want = &w[&drop];
+        for loc in [pot.as_str(), free, skull] {
+            assert!(world.spots.contains(&loc.to_string()), "{loc} has no drop ring pack");
+        }
+        assert!(matches!(world.kind, Kind::Free | Kind::Holder), "{:?}", world.kind);
+        let (spec, layers): (Spec, Layers) = world.spec().unwrap();
+        assert_eq!(spec.item, r.drop_item);
+        assert_eq!(spec.name, r.drop_actor);
+        assert_eq!(spec.identity_override(), Some(r.actor));
+        assert!(layers.drop_ring);
+        assert_eq!(w[&kit::hang_of(&drop)].kind, Kind::Skull);
     }
 
     fn real() -> Option<PB> {

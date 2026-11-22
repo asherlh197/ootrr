@@ -55,6 +55,11 @@ pub enum Songs {
 pub struct Plan {
     pub chests: Mode,
     pub keys: di::Keys,
+    pub rings: bool,
+    pub ring_mode: crate::key_rings::Mode,
+    pub ring_count: usize,
+    pub active_rings: Vec<&'static crate::key_rings::Ring>,
+    pub hideout_ring: bool,
     pub hideout: Keep,
     pub rewards: crate::flow_extra::Rewards,
     pub hearts: bool,
@@ -152,6 +157,77 @@ fn hideout_mode(s: &Settings, bad: &mut Vec<String>) -> Keep {
     }
 }
 
+fn ring_mode(s: &Settings, bad: &mut Vec<String>) -> crate::key_rings::Mode {
+    use crate::key_rings::Mode;
+    match s.text(crate::key_rings::MODE_SETTING) {
+        Ok("all") => Mode::All,
+        Ok("count") => Mode::Count,
+        Ok("selection") => Mode::Selection,
+        Ok("random") => Mode::Random,
+        Ok(v) => {
+            bad.push(format!("{} is {v}, which is not a known choice", crate::key_rings::MODE_SETTING));
+            Mode::All
+        }
+        Err(e) => {
+            bad.push(e.to_string());
+            Mode::All
+        }
+    }
+}
+
+fn ring_count(s: &Settings, bad: &mut Vec<String>) -> usize {
+    match s.int(crate::key_rings::COUNT_SETTING) {
+        Ok(n) if (1..=crate::key_rings::RINGS.len() as i64).contains(&n) => n as usize,
+        Ok(n) => {
+            bad.push(format!("{} is {n}, outside 1..=8", crate::key_rings::COUNT_SETTING));
+            8
+        }
+        Err(e) => {
+            bad.push(e.to_string());
+            8
+        }
+    }
+}
+
+fn ring_selection(s: &Settings, bad: &mut Vec<String>) -> Vec<&'static crate::key_rings::Ring> {
+    match s.items(crate::key_rings::SELECTION_SETTING) {
+        Ok(ids) => crate::key_rings::selected(ids),
+        Err(e) => {
+            bad.push(e.to_string());
+            Vec::new()
+        }
+    }
+}
+
+fn active_rings(
+    s: &Settings,
+    seed: Option<&str>,
+    mode: crate::key_rings::Mode,
+    count: &mut usize,
+    bad: &mut Vec<String>,
+) -> Vec<&'static crate::key_rings::Ring> {
+    use crate::key_rings::Mode;
+    match mode {
+        Mode::All => crate::key_rings::all(),
+        Mode::Selection => {
+            let got: Vec<&'static crate::key_rings::Ring> = ring_selection(s, bad);
+            if got.is_empty() {
+                bad.push(format!("{} is empty; select at least one dungeon when key rings are on", crate::key_rings::SELECTION_SETTING));
+            }
+            got
+        }
+        Mode::Count => seed.map(|x| crate::key_rings::count(x, *count)).unwrap_or_default(),
+        Mode::Random => match seed {
+            Some(x) => {
+                let (n, got): (usize, Vec<&'static crate::key_rings::Ring>) = crate::key_rings::random(x);
+                *count = n;
+                got
+            }
+            None => Vec::new(),
+        },
+    }
+}
+
 pub const KEY_LAYOUTS: [&str; 3] = ["fire_key_layout", "water_key_layout", "spirit_key_layout"];
 
 impl Plan {
@@ -187,6 +263,12 @@ impl Plan {
         }
         if self.keys_roam() {
             out.extend(KEY_LAYOUTS.iter().map(|k| (*k, "shuffled")));
+        }
+        if self.rings {
+            out.push((crate::key_rings::SETTING, "true"));
+            for r in &self.active_rings {
+                out.push((r.select, "true"));
+            }
         }
         if self.hideout != Keep::Vanilla {
             let mode: &str = match self.hideout {
@@ -269,6 +351,12 @@ pub(crate) fn toggle(s: &Settings, key: &str, bad: &mut Vec<String>) -> bool {
 }
 
 pub fn plan(s: &Settings) -> Res<Plan> {
+    plan_with_seed(s, None)
+}
+
+/// Build a plan with the seed available. Count and Random need it to derive the active standard
+/// ring subset; every other caller can keep using `plan`.
+pub fn plan_with_seed(s: &Settings, seed: Option<&str>) -> Res<Plan> {
     let mut bad: Vec<String> = Vec::new();
     let mut noted: Vec<String> = Vec::new();
     crate::slice::unsupported::check(s, &mut bad, &mut noted);
@@ -280,6 +368,18 @@ pub fn plan(s: &Settings) -> Res<Plan> {
     let world: pu::Free = pu::mode(s, &mut bad);
     let drops: crate::pot_slice::Drops = crate::pot_slice::plan::read(s, &mut bad);
     let keys: di::Keys = di::Keys::read(s, &mut bad);
+    let rings: bool = toggle(s, crate::key_rings::SETTING, &mut bad);
+    if rings && keys.small == Keep::Vanilla {
+        bad.push("key_rings is on while shuffle_smallkeys is vanilla; key rings only work when small keys are shuffled".to_string());
+    }
+    let ring_mode: crate::key_rings::Mode = ring_mode(s, &mut bad);
+    let mut ring_count: usize = ring_count(s, &mut bad);
+    let active_rings: Vec<&'static crate::key_rings::Ring> = if rings {
+        active_rings(s, seed, ring_mode, &mut ring_count, &mut bad)
+    } else {
+        Vec::new()
+    };
+    let hideout_ring: bool = toggle(s, crate::key_rings::HIDEOUT_SETTING, &mut bad);
     di::chest_guard(s, chests, [keys.small, keys.boss, keys.ganon, keys.map], &mut bad);
     let mut rewards: crate::flow_extra::Rewards = crate::flow_extra::Rewards::read(s, &mut bad);
     let hearts: bool = toggle(s, "shuffle_boss_hearts", &mut bad);
@@ -319,6 +419,12 @@ pub fn plan(s: &Settings) -> Res<Plan> {
     let difficulty: crate::difficulty::Opts = crate::difficulty::read(s, &mut bad);
     if hideout != Keep::Vanilla && open.fortress != crate::open_world::Fortress::Open {
         bad.push("shuffle_hideoutkeys needs gerudo_fortress=open; the four native drops are only rewired for the already-cleared fortress".to_string());
+    }
+    if hideout_ring && hideout == Keep::Vanilla {
+        bad.push("hideout_key_rings is on while shuffle_hideoutkeys is vanilla; the Hideout ring needs shuffled Hideout keys".to_string());
+    }
+    if hideout_ring && open.fortress != crate::open_world::Fortress::Open {
+        bad.push("hideout_key_rings needs gerudo_fortress=open, like shuffled Hideout keys".to_string());
     }
     if open.fortress == crate::open_world::Fortress::Open {
         crate::start_items::give::add(&mut kit, "gerudo_card");
@@ -376,6 +482,7 @@ pub fn plan(s: &Settings) -> Res<Plan> {
         (start.reward != Reward::Off, "You start the game with one random Stone or Medallion."),
         (!start.pouch.is_empty(), "The ticked Kokiri Sword, Deku Shield or Slingshot is added to the pouch when a new game starts. A ticked Big or Biggest Bullet Bag brings the Slingshot with it."),
         (keys.small.roams(), "Small keys can be found in other dungeons or outside them. A chest key is counted for the dungeon it belongs to and the chest says which."),
+        (rings, crate::key_rings::NOTE),
         (hideout != Keep::Vanilla, "Thieves' Hideout Small Keys are shuffled. The four native key drops hold shuffled non-key items."),
         (gates.forest != Forest::Closed, "Kokiri Forest starts open. The blocker walls are switched off when a new game starts."),
         (gates.kakariko, "The Kakariko gate starts open and the castle visit is skipped. A new game sets the castle quest complete, the Door of Time quest past Impa's send off, the Fire Stone quest past the gate and the gate guard's flag, and gives the items of Zelda's Letter and the Song from Impa."),
@@ -396,6 +503,12 @@ pub fn plan(s: &Settings) -> Res<Plan> {
     ] {
         if on {
             notes.push(text.to_string());
+        }
+    }
+    if rings {
+        let extra: String = crate::key_rings::mode_note(ring_mode, ring_count, &active_rings);
+        if !extra.is_empty() {
+            notes.push(extra);
         }
     }
     if gates.kakariko {
@@ -465,7 +578,7 @@ pub fn plan(s: &Settings) -> Res<Plan> {
         notes.push(crate::lacs_key::NOTE.to_string());
         notes.push(crate::medal_gate::LACS_NOTE.to_string());
     }
-    Ok(Plan { chests, keys, hideout, rewards, hearts, world, songs, harp_colors, hints, fast, chest_sizes, intro, start, gates, excluded, notes, drops, skulls, remake, chus, qol, treasure, day_skulls, kit, open, npc, shops, bridge, debug_names, silver, lacs, rainbow, trials, door, nocturne, prelude, short, first_pickups, area_intros, story, endings, ocarinas, kokiri_sword, difficulty })
+    Ok(Plan { chests, keys, rings, ring_mode, ring_count, active_rings, hideout_ring, hideout, rewards, hearts, world, songs, harp_colors, hints, fast, chest_sizes, intro, start, gates, excluded, notes, drops, skulls, remake, chus, qol, treasure, day_skulls, kit, open, npc, shops, bridge, debug_names, silver, lacs, rainbow, trials, door, nocturne, prelude, short, first_pickups, area_intros, story, endings, ocarinas, kokiri_sword, difficulty })
 }
 
 #[cfg(test)]
@@ -556,6 +669,86 @@ mod tests {
         let p: Plan = plan(&s).unwrap();
         assert_eq!(p.keys.small, Keep::Vanilla);
         assert_eq!(p.chests, Mode::Dungeons);
+    }
+
+    #[test]
+    fn key_rings_need_shuffled_small_keys_and_reach_the_logic() {
+        let mut s: Settings = Settings::default();
+        s.set("shuffle_smallkeys", Value::s("vanilla")).unwrap();
+        s.set(crate::key_rings::SETTING, Value::Bool(true)).unwrap();
+        let e: String = plan(&s).err().unwrap().to_string();
+        assert!(e.contains("key_rings is on while shuffle_smallkeys is vanilla"), "{e}");
+
+        s.set("shuffle_smallkeys", Value::s("keysanity")).unwrap();
+        let p: Plan = plan(&s).unwrap();
+        assert!(p.rings);
+        assert!(p.notes.iter().any(|n| n == crate::key_rings::NOTE));
+        assert!(p.logic().contains(&(crate::key_rings::SETTING, "true")));
+    }
+
+    #[test]
+    fn ring_modes_derive_the_active_standard_dungeons_from_settings_and_seed() {
+        use crate::key_rings::{self, Mode};
+
+        let mut s: Settings = Settings::default();
+        s.set("shuffle_smallkeys", Value::s("keysanity")).unwrap();
+        s.set(key_rings::SETTING, Value::Bool(true)).unwrap();
+
+        let all: Plan = plan_with_seed(&s, Some("seed")).unwrap();
+        assert_eq!(all.ring_mode, Mode::All);
+        assert_eq!(all.active_rings, key_rings::all());
+        assert_eq!(all.logic().iter().filter(|(k, _)| k.starts_with("key_ring_")).count(), 8);
+
+        s.set(key_rings::MODE_SETTING, Value::s("selection")).unwrap();
+        s.set(key_rings::SELECTION_SETTING, Value::set(&["ganons_castle", "forest_temple"])).unwrap();
+        let picked: Plan = plan_with_seed(&s, Some("seed")).unwrap();
+        assert_eq!(picked.active_rings.iter().map(|r| r.choice).collect::<Vec<_>>(), ["forest_temple", "ganons_castle"]);
+        assert!(picked.logic().contains(&("key_ring_forest_temple", "true")));
+        assert!(!picked.logic().contains(&("key_ring_fire_temple", "true")));
+        s.set(key_rings::SELECTION_SETTING, Value::set(&[])).unwrap();
+        let e: String = plan_with_seed(&s, Some("seed")).err().unwrap().to_string();
+        assert!(e.contains("key_rings_selection is empty"), "{e}");
+
+        s.set(key_rings::MODE_SETTING, Value::s("count")).unwrap();
+        s.set(key_rings::SELECTION_SETTING, Value::set(&key_rings::CHOICE_IDS)).unwrap();
+        s.set(key_rings::COUNT_SETTING, Value::Int(3)).unwrap();
+        let a: Plan = plan_with_seed(&s, Some("seed")).unwrap();
+        let b: Plan = plan_with_seed(&s, Some("seed")).unwrap();
+        assert_eq!(a.active_rings.len(), 3);
+        assert_eq!(a.ring_count, 3);
+        assert_eq!(a.active_rings, b.active_rings);
+        assert!(a.notes.iter().any(|n| n.contains("3 seed-randomized standard dungeons")));
+
+        s.set(key_rings::MODE_SETTING, Value::s("random")).unwrap();
+        let r: Plan = plan_with_seed(&s, Some("seed")).unwrap();
+        assert!((1..=8).contains(&r.ring_count));
+        assert_eq!(r.active_rings.len(), r.ring_count);
+        assert_eq!(r.active_rings, plan_with_seed(&s, Some("seed")).unwrap().active_rings);
+        assert!(r.active_rings.iter().all(|x| key_rings::by_choice(x.choice).is_some()));
+    }
+
+    #[test]
+    fn hideout_ring_is_a_separate_gated_toggle() {
+        use crate::key_rings;
+
+        let mut s: Settings = Settings::default();
+        s.set("shuffle_smallkeys", Value::s("keysanity")).unwrap();
+        s.set("gerudo_fortress", Value::s("open")).unwrap();
+        s.set("shuffle_hideoutkeys", Value::s("keysanity")).unwrap();
+        s.set(key_rings::HIDEOUT_SETTING, Value::Bool(true)).unwrap();
+        let p: Plan = plan_with_seed(&s, Some("seed")).unwrap();
+        assert!(p.hideout_ring);
+        assert!(!p.rings);
+        assert!(p.active_rings.is_empty());
+
+        s.set("shuffle_hideoutkeys", Value::s("vanilla")).unwrap();
+        let e: String = plan_with_seed(&s, Some("seed")).err().unwrap().to_string();
+        assert!(e.contains("hideout_key_rings is on while shuffle_hideoutkeys is vanilla"), "{e}");
+
+        s.set("shuffle_hideoutkeys", Value::s("keysanity")).unwrap();
+        s.set("gerudo_fortress", Value::s("normal")).unwrap();
+        let e: String = plan_with_seed(&s, Some("seed")).err().unwrap().to_string();
+        assert!(e.contains("hideout_key_rings needs gerudo_fortress=open"), "{e}");
     }
 
     #[test]

@@ -46,7 +46,7 @@ pub fn actors(d: &Data, seed: &SeedFile, fixed: &BM<String, String>) -> Res<BM<S
             .placements
             .get(name)
             .ok_or_else(|| E::Msg(format!("{name} has no item in this seed")))?;
-        let pick: key_spots::Pick = key_spots::resolve(d, item, fixed.get(name).map(|s| s.as_str()))
+        let pick: key_spots::Pick = key_spots::resolve_at(d, name, item, fixed.get(name).map(|s| s.as_str()))
             .map_err(|e| E::Msg(format!("{name} holds {item}, which cannot drop from a guard: {e}")))?;
         out.insert(name.to_string(), pick.pack);
     }

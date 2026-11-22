@@ -11,7 +11,8 @@ use crate::slice::data::{Data, Ev, State};
 use crate::slice::flow_pool::{dest_form, pool_actor};
 use crate::slice::flow_wrap::wraps as flow_wraps;
 use crate::slice::pickups as pu;
-use crate::slice::support::{plan, Keep};
+use crate::slice::support::plan_with_seed as plan;
+use crate::slice::support::Keep;
 
 
 #[derive(Debug, Clone, PartialEq)]
@@ -105,7 +106,7 @@ pub(crate) fn actors_for(d: &Data, seed: &SeedFile) -> Res<BM<String, String>> {
             dests.entry(item.clone()).or_default().push(loc.clone());
         }
     }
-    let p = plan(&seed.settings()?.settings)?;
+    let p = plan(&seed.settings()?.settings, Some(&seed.seed))?;
     let stripped: bool = crate::start_items::pool::active(&p);
     let mut out: BM<String, String> = BM::new();
     for (item, locs) in &dests {
@@ -118,6 +119,14 @@ pub(crate) fn actors_for(d: &Data, seed: &SeedFile) -> Res<BM<String, String>> {
             let canon: String = d.item(item).and_then(|i| i.actor.clone()).ok_or_else(|| E::Msg(format!("{item} has no key actor")))?;
             while acts.len() < locs.len() {
                 acts.push(canon.clone());
+            }
+        }
+        // A ring has no vanilla chest actor: its generated pickup pack supplies one for every
+        // chest or gift that holds it.
+        if let Some(r) = crate::key_rings::by_item(item) {
+            let made: String = crate::key_rings::pack(r.actor);
+            while acts.len() < locs.len() {
+                acts.push(made.clone());
             }
         }
         if stripped {
@@ -155,7 +164,7 @@ pub(crate) fn targets_with(d: &Data, seed: &SeedFile, roam: bool, fixed: &BM<Str
     let mut out: Vec<Target> = Vec::new();
     let mut flows: Vec<Choice> = Vec::new();
     let mut same: usize = 0;
-    let hideout: bool = plan(&seed.settings()?.settings)?.hideout != Keep::Vanilla;
+    let hideout: bool = plan(&seed.settings()?.settings, Some(&seed.seed))?.hideout != Keep::Vanilla;
     let given: BM<String, String> = actors_for(d, seed)?;
     let views: BM<String, String> = crate::slice::tier_order::chest_views(d, seed)?;
     let wrapped: BM<String, &'static str> = flow_wraps(d, seed);
@@ -359,6 +368,21 @@ mod tests {
             }
         }
         assert!(placed > 0);
+    }
+
+    #[test]
+    fn rings_get_generated_actors_in_chests_and_gifts() {
+        let d: Data = Data::load().unwrap();
+        let chest: &str = "KF Midos Top Left Chest";
+        let gift: &str = "LW Gift from Saria";
+        for r in crate::key_rings::RINGS {
+            let places: BM<String, String> = [(chest, r.item), (gift, r.item)].into_iter().map(|(l, i)| (l.to_string(), i.to_string())).collect();
+            let seed: SeedFile = SeedFile::new("rings in a chest and a gift", &Settings::default(), "rings", places).unwrap();
+            let given: BM<String, String> = actors_for(&d, &seed).unwrap();
+            let made: String = crate::key_rings::pack(r.actor);
+            assert_eq!(given.get(chest).map(String::as_str), Some(made.as_str()), "{}", r.item);
+            assert_eq!(given.get(gift).map(String::as_str), Some(made.as_str()), "{}", r.item);
+        }
     }
 
     #[test]

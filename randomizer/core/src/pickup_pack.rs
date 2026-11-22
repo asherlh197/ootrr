@@ -32,6 +32,20 @@ pub struct Spec {
     pub name: String,
     pub style: Style,
     pub heap: Option<i32>,
+    /// Template actor for rows, models and pack files. Defaults to `item`.
+    pub source: Option<String>,
+    /// Saved pouch actor. Defaults to whatever the source pouch chain names.
+    pub identity: Option<String>,
+}
+
+impl Spec {
+    pub fn source(&self) -> &str {
+        self.source.as_deref().unwrap_or(&self.item)
+    }
+
+    pub fn identity_override(&self) -> Option<&str> {
+        self.identity.as_deref()
+    }
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -40,7 +54,15 @@ pub struct Layers {
     pub ammo: bool,
     pub magic: bool,
     pub model: Option<String>,
-    /// The pickup turns in place, glows and glitters like a Heart Piece and rests clear of the
+    /// The pouch parameter template is taken from this actor instead of the model source. Key rings
+    /// keep the small key model but need a plain key-item pouch, not the stockable small key one.
+    pub pouch_from: Option<String>,
+    /// The saved pouch identity of a generated key ring. Its get event saves `IsGet.<this>`.
+    pub ring: Option<String>,
+    /// A ring on a world pickup body instead of the event-form key-item actor. Pots and other
+    /// breakable holders need this: the event actor has no physics and hangs where it was spawned.
+    pub drop_ring: bool,
+    /// The pickup turns in place, glints like a Gold Skulltula token and rests clear of the
     /// ground (actor::SPIN, actor::GLINT_USER, crate::pickup_pack::lift). The seed build turns it on for every pack it writes.
     pub spin: bool,
     /// With spin: how far, in millimetres, the pickup's body reaches below its origin so that the
@@ -50,7 +72,7 @@ pub struct Layers {
 
 impl Layers {
     pub fn plain(&self) -> bool {
-        self.tags.is_empty() && !self.ammo && !self.magic && self.model.is_none() && !self.spin
+        self.tags.is_empty() && !self.ammo && !self.magic && self.model.is_none() && self.pouch_from.is_none() && self.ring.is_none() && !self.drop_ring && !self.spin
     }
 
     pub fn kit_ok(&self) -> bool {

@@ -14,7 +14,7 @@ use crate::slice::logic::world_with;
 use crate::slice::pick::{pick, scoped, Pick};
 use crate::slice::pickups as pu;
 use crate::slice::plando::{loc_of, resolve, Entry};
-use crate::slice::support::{plan, Keep, Plan, Songs};
+use crate::slice::support::{plan, plan_with_seed, Keep, Plan, Songs};
 use crate::slice::watch::{Live, Watch};
 use crate::spoiler::{playthrough, Spoiler};
 use crate::world::{LocId, Placement, World};
@@ -271,7 +271,7 @@ pub fn generate_data(d: &Data, s: &Settings, seed: &str, o: &GenOpts) -> Res<Gen
         return Err(E::Format("the chest list in data/slice.json is empty, run slice-scan first"));
     }
     let watch: Watch = Watch::new(o.limit, o.live.clone());
-    let mut p: Plan = plan(s)?;
+    let mut p: Plan = plan_with_seed(s, Some(seed))?;
     p.notes.extend(p.trials.note());
     let room: crate::shops::layout::Room = crate::shops::rules::room(d, &p)?;
     let mut lay: Option<crate::shops::Layout> = crate::shops::layout::of(&p.shops, seed, room)?;
@@ -299,8 +299,14 @@ pub fn generate_data(d: &Data, s: &Settings, seed: &str, o: &GenOpts) -> Res<Gen
         p.notes.retain(|n| !pu::is_note(n));
     }
     let pooled: Placement = restore_upgrades(&w, d, &vanilla, &pk.free, &|it: ItemId, l: LocId| allowed(d, &w, &p, it, l));
-    let (base, gone): (Placement, Vec<String>) = crate::start_items::pool::base(d, &w, &p, &pooled, &pk.free)?;
+    let (mut base, gone): (Placement, Vec<String>) = crate::start_items::pool::base(d, &w, &p, &pooled, &pk.free)?;
     p.notes.extend(gone);
+    let mut ring_notes: Vec<String> = Vec::new();
+    {
+        let ok = |it: ItemId, l: LocId| allowed(d, &w, &p, it, l);
+        crate::slice::rings::replace(d, &w, &p, &mut base, &pk.free, &ok, &mut ring_notes)?;
+    }
+    p.notes.extend(ring_notes);
     let ex: Vec<String> = check_excluded(&w, &p, &pk.free, &base)?;
     p.notes.extend(ex);
     let ok = |it: ItemId, l: LocId| allowed(d, &w, &p, it, l);
@@ -553,6 +559,53 @@ mod tests {
             assert!(g.counts.changed <= g.counts.randomized);
             let back: SeedFile = SeedFile::parse(&g.seed_file.to_text()).unwrap();
             assert_eq!(back, g.seed_file);
+        }
+    }
+
+    #[test]
+    fn key_ring_count_and_random_modes_generate_with_matching_build_plans() {
+        use crate::key_rings;
+
+        let d: Data = Data::load().unwrap();
+        let seed: &str = "key ring smoke seed";
+        for mode in ["count", "random"] {
+            let mut s: Settings = all_chests();
+            s.set("shuffle_smallkeys", Value::s("keysanity")).unwrap();
+            s.set(key_rings::SETTING, Value::Bool(true)).unwrap();
+            s.set(key_rings::MODE_SETTING, Value::s(mode)).unwrap();
+            if mode == "count" {
+                s.set(key_rings::COUNT_SETTING, Value::Int(3)).unwrap();
+            }
+            let expected: Vec<&'static key_rings::Ring> = if mode == "count" {
+                key_rings::count(seed, 3)
+            } else {
+                key_rings::random(seed).1
+            };
+            let gen_plan: Plan = plan_with_seed(&s, Some(seed)).unwrap();
+            assert_eq!(gen_plan.active_rings, expected, "{mode}");
+
+            let o: GenOpts = GenOpts { tries: 40, ..GenOpts::default() };
+            let g: Generated = generate_data(&d, &s, seed, &o).unwrap_or_else(|e| panic!("{mode}: {e}"));
+            let loaded = g.seed_file.settings().unwrap();
+            let build_plan: Plan = plan_with_seed(&loaded.settings, Some(&g.seed_file.seed)).unwrap();
+            assert_eq!(build_plan.ring_mode, gen_plan.ring_mode, "{mode}");
+            assert_eq!(build_plan.ring_count, gen_plan.ring_count, "{mode}");
+            assert_eq!(build_plan.active_rings, expected, "{mode}");
+            assert_eq!(loaded.settings.text(key_rings::MODE_SETTING).unwrap(), mode);
+            assert!(g.report.contains("seed-randomized standard dungeons"), "{mode}: {}", g.report);
+
+            for r in &key_rings::RINGS {
+                let active: bool = expected.iter().any(|x| x.item == r.item);
+                let rings: usize = g.seed_file.placements.values().filter(|v| v.as_str() == r.item).count();
+                let keys: usize = g.seed_file.placements.values().filter(|v| v.as_str() == r.key).count();
+                if active {
+                    assert_eq!(rings, 1, "{}: {rings} ring placements", r.dungeon);
+                    assert_eq!(keys, 0, "{}: {keys} key placements", r.dungeon);
+                } else {
+                    assert_eq!(rings, 0, "{}: {rings} ring placements", r.dungeon);
+                    assert!(keys > 0, "{}: inactive dungeon lost its small keys", r.dungeon);
+                }
+            }
         }
     }
 

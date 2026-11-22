@@ -70,7 +70,7 @@ pub fn layers(rf: &mut Romfs, item: &str, l: &Layers) -> Res<Layers> {
 pub fn for_pack(t: &Byml, pack: &str) -> Option<f32> {
     let p: crate::slice::key_spots::Pick = crate::slice::key_spots::by_pack(pack)?;
     let (s, l) = p.spec().ok()?;
-    let mm: u32 = lift_of(t, l.model.as_deref().unwrap_or(&s.item));
+    let mm: u32 = lift_of(t, l.model.as_deref().unwrap_or(s.source()));
     (mm > 0).then_some(mm as f32 / 1000.0)
 }
 
