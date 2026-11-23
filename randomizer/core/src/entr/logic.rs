@@ -3,7 +3,7 @@ use std::collections::HashMap as HM;
 use crate::entr::data::{load, Cat};
 use crate::entr::layout::{ages_fit, Layout};
 use crate::entr::mode::Mode;
-use crate::entr::pools::DUNGEONS;
+use crate::entr::pools::{find, DUNGEONS};
 use crate::error::{Error as E, Res};
 use crate::rng::Rng;
 use crate::search::Search;
@@ -100,6 +100,11 @@ pub fn keeps(base: &[bool], got: &[bool]) -> bool {
 
 pub fn keys_fit(w: &World, h: &Have) -> bool {
     for (k, home) in &h.keys {
+        // Only dungeons with a movable entrance can be made self-locking by this shuffle.
+        // Hideout and Ganon's Castle keys have no entrance in the pool, so they cannot fail here.
+        if find(home).is_none() {
+            continue;
+        }
         let mut prog: Vec<ItemId> = h.prog.clone();
         if let Some(at) = prog.iter().position(|x| x == k) {
             prog.swap_remove(at);
