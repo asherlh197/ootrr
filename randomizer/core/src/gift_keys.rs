@@ -43,7 +43,7 @@ impl Item {
 
     /// Rings are ordinary `Item` actors at runtime, so they have to be recognised by their name.
     pub fn of_item(name: &str, kind: &str) -> Option<Item> {
-        crate::key_rings::by_item(name).map(Item::Ring).or_else(|| Item::of(kind))
+        crate::key_rings::by_item_any(name).map(Item::Ring).or_else(|| Item::of(kind))
     }
 }
 
@@ -164,7 +164,7 @@ pub fn is_ring_credit(f: &Flow, index: usize) -> bool {
     let Some(folder) = name.strip_prefix("DungeonInfo.").and_then(|s| s.strip_suffix(".SmallKeyNum")) else {
         return false;
     };
-    let Some(r) = crate::key_rings::by_folder(folder) else {
+    let Some(r) = crate::key_rings::by_folder_any(folder) else {
         return false;
     };
     c.get("Value") == Some(&Val::Int(r.count as i32))
@@ -438,13 +438,14 @@ mod tests {
     /// retargets ordinary grants to the end of the scene, which used to orphan the ring's writes.
     #[test]
     fn a_ring_gift_survives_the_shortened_gift_scene() {
-        let Some((_, mut b)) = gift_scene() else { return };
-        let f: &mut Flow = b.flows.first_mut().unwrap();
-        let ring: &'static crate::key_rings::Ring = crate::key_rings::by_folder("ShadowTemple").unwrap();
-        edit_flow(f, 51, "Event68", Item::Ring(ring), "ShadowTemple", None).unwrap();
-        assert!(is_ring_credit(f, 51));
-        crate::story_skip::patch_gift(&mut b).unwrap();
-        let f: &mut Flow = b.flows.first_mut().unwrap();
-        assert!(is_ring_credit(f, 51), "the shortened gift no longer runs the ring credit");
+        for ring in crate::key_rings::all_with_hideout() {
+            let Some((_, mut b)) = gift_scene() else { return };
+            let f: &mut Flow = b.flows.first_mut().unwrap();
+            edit_flow(f, 51, "Event68", Item::Ring(ring), ring.folder, None).unwrap();
+            assert!(is_ring_credit(f, 51), "{}", ring.item);
+            crate::story_skip::patch_gift(&mut b).unwrap();
+            let f: &mut Flow = b.flows.first_mut().unwrap();
+            assert!(is_ring_credit(f, 51), "the shortened gift no longer runs the {} credit", ring.item);
+        }
     }
 }

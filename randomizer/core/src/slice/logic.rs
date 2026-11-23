@@ -72,6 +72,7 @@ pub fn spec(d: &Data, over: &[(&str, &str)]) -> Res<Spec> {
     // goes (a Piece of Heart behind a bean spot nobody can plant).
     let hearts: bool = HEART_GOALS.iter().any(|k| s.settings.get(k) == Some(&Val::Str("hearts".to_string())));
     let rings: bool = s.settings.flag(crate::key_rings::SETTING);
+    let hideout_ring: bool = s.settings.flag(crate::key_rings::HIDEOUT_SETTING);
     let chosen_rings: Vec<&'static crate::key_rings::Ring> = if rings {
         let picked: Vec<&'static crate::key_rings::Ring> = crate::key_rings::RINGS
             .iter()
@@ -83,7 +84,7 @@ pub fn spec(d: &Data, over: &[(&str, &str)]) -> Res<Spec> {
         Vec::new()
     };
     for it in &d.items {
-        if crate::key_rings::by_item(&it.name).is_some() {
+        if crate::key_rings::by_item_any(&it.name).is_some() {
             continue;
         }
         let heart: bool = crate::slice::generate::HEARTS.iter().any(|h| it.name.starts_with(h));
@@ -91,6 +92,9 @@ pub fn spec(d: &Data, over: &[(&str, &str)]) -> Res<Spec> {
     }
     for r in chosen_rings {
         s.add_ring(r.item, r.key, r.count);
+    }
+    if hideout_ring {
+        s.add_ring(crate::key_rings::HIDEOUT_RING.item, crate::key_rings::HIDEOUT_RING.key, crate::key_rings::HIDEOUT_RING.count);
     }
     s.add_helpers(HELPERS)?;
     let mut files: Vec<Json> = Vec::new();

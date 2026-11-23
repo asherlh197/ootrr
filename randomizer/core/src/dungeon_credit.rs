@@ -405,7 +405,7 @@ pub fn audit(a: &Flow, b: &Flow) -> Vec<String> {
     }
     for y in &b.entries[a.entries.len()..] {
         let key: bool = y.name.strip_prefix(PREFIX).is_some_and(|d| DUNGEONS.contains(&d));
-        let ring: bool = y.name.strip_prefix(RING_ENTRY_PREFIX).is_some_and(|d| crate::key_rings::by_folder(d).is_some());
+        let ring: bool = y.name.strip_prefix(RING_ENTRY_PREFIX).is_some_and(|d| crate::key_rings::by_folder_any(d).is_some());
         if !key && !ring {
             bad.push(format!("entry {} was added", y.name));
         }
@@ -476,7 +476,7 @@ pub fn ring_credit(f: &mut Flow, r: &'static crate::key_rings::Ring) -> Res<()> 
 /// Adds the chest credit entries of every standard key ring, for one chest size.
 pub fn credit_rings(f: &mut Flow, folders: &[&'static str]) -> Res<()> {
     for folder in folders {
-        let r: &'static crate::key_rings::Ring = crate::key_rings::by_folder(folder).ok_or_else(|| Error::Msg(format!("{folder} has no key ring")))?;
+        let r: &'static crate::key_rings::Ring = crate::key_rings::by_folder_any(folder).ok_or_else(|| Error::Msg(format!("{folder} has no key ring")))?;
         ring_credit(f, r)?;
     }
     if let Some(m) = sound(f).first() {
@@ -504,7 +504,7 @@ pub fn sweep_except(y: &mut Byml, file: &str, skip: &BS<u64>) -> Res<usize> {
             continue;
         };
         let drop: &str = text(d, DROP);
-        let ring: Option<&'static crate::key_rings::Ring> = crate::key_rings::by_actor(drop);
+        let ring: Option<&'static crate::key_rings::Ring> = crate::key_rings::by_actor_any(drop);
         if (drop != KEY && ring.is_none()) || text(d, "GetEventName").starts_with(EVENT_PREFIX) || text(d, "GetEventName").starts_with(RING_EVENT_PREFIX) {
             continue;
         }
@@ -888,6 +888,17 @@ mod tests {
             ],
             "the ring is gotten first, then keys are written, then the count is spoken"
         );
+    }
+
+    #[test]
+    fn the_hideout_ring_chest_uses_the_gerudo_fortress_credit() {
+        let r: &'static crate::key_rings::Ring = &crate::key_rings::HIDEOUT_RING;
+        let mut f: Flow = small();
+        ring_credit(&mut f, r).unwrap();
+        assert!(audit(&small(), &f).is_empty());
+        let e: &Entry = f.entries.iter().find(|e| e.name == ring_entry_name(r.folder)).unwrap();
+        assert_eq!(param(&f.events[e.main as usize], "ContentName"), Some(&Val::Str(r.actor.to_string())));
+        assert!(f.events.iter().any(|e| matches!(&e.kind, Kind::Action { params: Some(c), .. } if c.get("GameDataName") == Some(&Val::Str(format!("DungeonInfo.{}.SmallKeyNum", r.folder))))));
     }
 
     #[test]

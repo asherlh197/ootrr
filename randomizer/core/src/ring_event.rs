@@ -21,8 +21,8 @@ const GANON: &[u8] = include_bytes!("../../../data/ring_events/Item_Ring_Ganon.e
 const SET_FLAG: &str = "OneShotSetNonStructGameDataBool";
 
 fn ring(actor: &str) -> Res<&'static crate::key_rings::Ring> {
-    crate::key_rings::RINGS
-        .iter()
+    crate::key_rings::all_with_hideout()
+        .into_iter()
         .find(|r| r.actor == actor)
         .ok_or_else(|| E::Msg(format!("ring event: unknown actor {actor}")))
 }
@@ -37,6 +37,7 @@ fn template(actor: &str) -> Res<&'static [u8]> {
         "Item_Ring_Well" => WELL,
         "Item_Ring_GTG" => GTG,
         "Item_Ring_Ganon" => GANON,
+        "Item_Ring_Hideout" => FOREST,
         _ => return Err(E::Msg(format!("ring event: unknown actor {actor}"))),
     })
 }
@@ -53,6 +54,8 @@ fn legacy(actor: &str) -> Res<&'static str> {
         "Item_Ring_Well" => "Well",
         "Item_Ring_GTG" => "GTG",
         "Item_Ring_Ganon" => "Ganon",
+        // The short Hideout name fits the Forest template's longer strings.
+        "Item_Ring_Hideout" => "ForestTemple",
         _ => return Err(E::Msg(format!("ring event: unknown actor {actor}"))),
     })
 }
@@ -141,7 +144,7 @@ mod tests {
 
     #[test]
     fn every_ring_event_sets_its_own_saved_flag() {
-        for r in crate::key_rings::RINGS {
+        for r in crate::key_rings::all_with_hideout() {
             let raw: Vec<u8> = make(r.actor).unwrap();
             let a: Ainb = Ainb::parse(&raw).unwrap();
             let flag: String = crate::key_rings::got_flag(r.actor);
@@ -162,7 +165,7 @@ mod tests {
 
     #[test]
     fn every_ring_event_leaves_key_credit_to_the_flows() {
-        for r in crate::key_rings::RINGS {
+        for r in crate::key_rings::all_with_hideout() {
             let raw: Vec<u8> = make(r.actor).unwrap();
             let a: Ainb = Ainb::parse(&raw).unwrap();
             for name in [format!("DungeonInfo.{}.SmallKeyNum", r.folder), format!("DungeonInfo.{}.SmallKeyTotalNum", r.folder)] {

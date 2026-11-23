@@ -755,7 +755,7 @@ mod tests {
             return;
         };
         let catalog: Vec<crate::pickup_pack::catalog::Entry> = crate::pickup_pack::catalog::load().unwrap();
-        for r in crate::key_rings::RINGS {
+        for r in crate::key_rings::all_with_hideout() {
             let e: &crate::pickup_pack::catalog::Entry = catalog.iter().find(|e| e.item == r.actor).unwrap();
             let (s, mut l): (Spec, Layers) = crate::pickup_pack::catalog::spec(r.actor, &e.args).unwrap();
             l.spin = true;

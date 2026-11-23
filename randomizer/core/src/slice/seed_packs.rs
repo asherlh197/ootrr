@@ -96,7 +96,7 @@ pub fn need(d: &Data, seed: &SeedFile, fixed: &BM<String, String>) -> Res<BM<Str
     // A ring is a generated actor, so even when it sits in a chest or is handed to Link its pack
     // has to be written. World spots take the drop form; chests and gifts take the event form.
     for (loc, item) in &seed.placements {
-        if crate::key_rings::by_item(item).is_none() {
+        if crate::key_rings::by_item_any(item).is_none() {
             continue;
         }
         let p: Pick = resolve_at(d, loc, item, fixed.get(loc).map(|s| s.as_str()))?;

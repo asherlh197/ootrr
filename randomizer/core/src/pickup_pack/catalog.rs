@@ -281,7 +281,7 @@ mod tests {
     #[test]
     fn key_ring_entries_split_the_template_from_the_saved_identity() {
         let all: Vec<Entry> = load().unwrap();
-        for r in crate::key_rings::RINGS {
+        for r in crate::key_rings::all_with_hideout() {
             let e: &Entry = all.iter().find(|e| e.item == r.actor).unwrap();
             assert_eq!(e.status, Status::Built, "{}", r.actor);
             assert_eq!(e.identity.as_deref(), Some(r.actor), "{}", r.actor);
@@ -300,7 +300,7 @@ mod tests {
     #[test]
     fn drop_ring_entries_keep_the_saved_ring_but_use_a_world_pickup_body() {
         let all: Vec<Entry> = load().unwrap();
-        for r in crate::key_rings::RINGS {
+        for r in crate::key_rings::all_with_hideout() {
             let e: &Entry = all.iter().find(|e| e.item == r.drop_item).unwrap();
             assert_eq!(e.status, Status::Built, "{}", r.drop_item);
             assert_eq!(e.identity.as_deref(), Some(r.actor), "{}", r.drop_item);

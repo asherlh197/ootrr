@@ -1,8 +1,8 @@
-//! One key ring per standard small-key dungeon.
+//! One key ring per standard small-key dungeon, plus one separately toggled Hideout ring.
 //!
-//! A ring is a generated pickup that grants every small key of one dungeon at once. Rings are
-//! only used when small keys are shuffled; the Hideout and Treasure Chest Game rings stay
-//! unmapped because their keys use separate game systems.
+//! A ring is a generated pickup that grants every small key of one dungeon at once. Standard rings
+//! are only used when small keys are shuffled. The Hideout ring is a manual choice outside the
+//! standard Count/Selection/Random settings; the Treasure Chest Game ring stays unmapped.
 
 use crate::rng::Rng;
 
@@ -102,8 +102,32 @@ pub const RINGS: [Ring; 8] = [
     Ring { item: "Small Key Ring (Ganons Castle)", key: "Small Key (Ganons Castle)", dungeon: "Ganons Castle", choice: "ganons_castle", select: "key_ring_ganons_castle", folder: "InsideGanonCastle", actor: "Item_Ring_Ganon", drop_item: "Item_RingDrop_Ganon", drop_actor: "Obj_RingDrop_Ganon", count: 2 },
 ];
 
+/// The Hideout ring is deliberately outside `RINGS`: it is enabled by its own manual toggle, never
+/// by Key Rings Count, Selection or Random. It still uses the same generated pickup and credit
+/// machinery as the standard rings.
+pub const HIDEOUT_RING: Ring = Ring {
+    item: "Small Key Ring (Thieves Hideout)",
+    key: "Small Key (Thieves Hideout)",
+    dungeon: "Thieves Hideout",
+    choice: "thieves_hideout",
+    select: HIDEOUT_SETTING,
+    folder: "GerudoFortress",
+    actor: "Item_Ring_Hideout",
+    drop_item: "Item_RingDrop_Hideout",
+    drop_actor: "Obj_RingDrop_Hideout",
+    count: 4,
+};
+
 pub fn all() -> Vec<&'static Ring> {
     RINGS.iter().collect()
+}
+
+/// Every ring this build knows, standard and manual Hideout. Shared pickup/credit code uses this;
+/// the ring-selection settings never do.
+pub fn all_with_hideout() -> Vec<&'static Ring> {
+    let mut out: Vec<&'static Ring> = all();
+    out.push(&HIDEOUT_RING);
+    out
 }
 
 pub fn by_item(item: &str) -> Option<&'static Ring> {
@@ -136,6 +160,32 @@ pub fn by_drop_item(item: &str) -> Option<&'static Ring> {
 
 pub fn by_drop_actor(actor: &str) -> Option<&'static Ring> {
     RINGS.iter().find(|r| r.drop_actor == actor)
+}
+
+/// Lookup for code shared with the manually enabled Hideout ring. The plain helpers above stay
+/// standard-only so Count, Selection and Random can never see Hideout.
+pub fn by_item_any(item: &str) -> Option<&'static Ring> {
+    by_item(item).or_else(|| (item == HIDEOUT_RING.item).then_some(&HIDEOUT_RING))
+}
+
+pub fn by_key_any(key: &str) -> Option<&'static Ring> {
+    by_key(key).or_else(|| (key == HIDEOUT_RING.key).then_some(&HIDEOUT_RING))
+}
+
+pub fn by_folder_any(folder: &str) -> Option<&'static Ring> {
+    by_folder(folder).or_else(|| (folder == HIDEOUT_RING.folder).then_some(&HIDEOUT_RING))
+}
+
+pub fn by_actor_any(actor: &str) -> Option<&'static Ring> {
+    by_actor(actor).or_else(|| (actor == HIDEOUT_RING.actor || actor == HIDEOUT_RING.drop_actor).then_some(&HIDEOUT_RING))
+}
+
+pub fn drop_pack_any(actor: &str) -> String {
+    by_actor_any(actor).map(|r| r.drop_actor.to_string()).unwrap_or_else(|| actor.to_string())
+}
+
+pub fn is_any_ring(item: &str) -> bool {
+    by_item_any(item).is_some()
 }
 
 /// Manual dungeon selection, returned in the stable catalog order.
@@ -241,6 +291,33 @@ mod tests {
     fn hideout_and_tcg_rings_are_not_standard_rings() {
         assert!(!is_ring("Small Key Ring (Thieves Hideout)"));
         assert!(!is_ring("Small Key Ring (Treasure Chest Game)"));
+        assert!(is_any_ring("Small Key Ring (Thieves Hideout)"));
+        assert!(!is_any_ring("Small Key Ring (Treasure Chest Game)"));
+    }
+
+    #[test]
+    fn hideout_ring_is_only_reachable_through_the_manual_helpers() {
+        let r: &'static Ring = &HIDEOUT_RING;
+        assert!(r.actor.len() <= 25);
+        assert!(r.drop_actor.len() <= 25);
+        assert_eq!(r.select, HIDEOUT_SETTING);
+        assert_eq!(by_item_any(r.item), Some(r));
+        assert_eq!(by_key_any(r.key), Some(r));
+        assert_eq!(by_folder_any(r.folder), Some(r));
+        assert_eq!(by_actor_any(r.actor), Some(r));
+        assert_eq!(by_actor_any(r.drop_actor), Some(r));
+        assert_eq!(drop_pack_any(r.actor), r.drop_actor);
+        assert_eq!(all_with_hideout().len(), RINGS.len() + 1);
+
+        assert_eq!(by_item(r.item), None);
+        assert_eq!(by_key(r.key), None);
+        assert_eq!(by_choice(r.choice), None);
+        assert!(!FOLDERS.contains(&r.folder));
+        assert!(!all().iter().any(|x| x.item == r.item));
+        assert!(!selected(&[r.choice.to_string()]).iter().any(|x| x.item == r.item));
+        assert!(!count("seed", 8).iter().any(|x| x.item == r.item));
+        assert!(!random("seed").1.iter().any(|x| x.item == r.item));
+        assert!(!mode_note(Mode::All, 8, &all()).contains(r.dungeon));
     }
 
     #[test]

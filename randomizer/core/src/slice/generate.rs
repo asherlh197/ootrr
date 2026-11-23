@@ -320,6 +320,7 @@ pub fn generate_data(d: &Data, s: &Settings, seed: &str, o: &GenOpts) -> Res<Gen
     {
         let ok = |it: ItemId, l: LocId| allowed(d, &w, &p, it, l);
         crate::slice::rings::replace_with(d, &w, &p, &mut base, &pk.free, &ok, &mut ring_notes, &extra_rings)?;
+        crate::slice::rings::replace_hideout(d, &w, &p, &mut base, &pk.free, &ok, &mut ring_notes)?;
     }
     p.notes.extend(ring_notes);
     let ex: Vec<String> = check_excluded(&w, &p, &pk.free, &base)?;

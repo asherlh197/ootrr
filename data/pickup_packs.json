@@ -1208,6 +1208,26 @@
     },
     {
       "group": "D",
+      "item": "Item_Ring_Hideout",
+      "pack": "Item_Ring_Hideout",
+      "args": [
+        "--name",
+        "Item_Ring_Hideout",
+        "--source",
+        "Item_Dungeon_SmallKey",
+        "--pouch-from",
+        "Item_Medal_Forest",
+        "--identity",
+        "Item_Ring_Hideout",
+        "--ring",
+        "Item_Ring_Hideout"
+      ],
+      "status": "built",
+      "identity": "Item_Ring_Hideout",
+      "notes": "Hideout key ring pickup. The small key model is kept, but the pouch and get event use the plain key-item template so the manually enabled ring is saved and credited as itself."
+    },
+    {
+      "group": "D",
       "item": "Item_Ring_Fire",
       "pack": "Item_Ring_Fire",
       "args": [
@@ -1365,6 +1385,26 @@
       "status": "built",
       "identity": "Item_Ring_Forest",
       "notes": "Drop-form key ring. The small key model, saved identity and get event stay the same; the pickup body is the world drop so pots and other holders give a falling, touchable item."
+    },
+    {
+      "group": "D",
+      "item": "Item_RingDrop_Hideout",
+      "pack": "Obj_RingDrop_Hideout",
+      "args": [
+        "--name",
+        "Obj_RingDrop_Hideout",
+        "--source",
+        "Item_Dungeon_SmallKey",
+        "--pouch-from",
+        "Item_Medal_Forest",
+        "--identity",
+        "Item_Ring_Hideout",
+        "--drop-ring",
+        "Item_Ring_Hideout"
+      ],
+      "status": "built",
+      "identity": "Item_Ring_Hideout",
+      "notes": "Drop-form Hideout key ring. The small key model, saved identity and get event stay the same; the pickup body is the world drop so pots and the four native guard spots give a falling, touchable item."
     },
     {
       "group": "D",

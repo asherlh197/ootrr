@@ -7,7 +7,7 @@
 use std::path::Path as P;
 
 use crate::error::{Error as E, Res};
-use crate::key_rings::{Ring, RINGS};
+use crate::key_rings::Ring;
 use crate::msbt::{self, Msbt};
 use crate::romfs::Romfs;
 use crate::sarc;
@@ -31,6 +31,10 @@ fn label(r: &Ring, suffix: &str) -> String {
 
 /// Adds the get texts for every ring to one language archive.
 pub fn apply(raw: &[u8]) -> Res<Vec<u8>> {
+    apply_with(raw, &crate::key_rings::all_with_hideout())
+}
+
+pub fn apply_with(raw: &[u8], rings: &[&Ring]) -> Res<Vec<u8>> {
     let mut es: Vec<sarc::Entry> = sarc::parse(raw)?;
     let at: usize = es
         .iter()
@@ -40,7 +44,7 @@ pub fn apply(raw: &[u8]) -> Res<Vec<u8>> {
     if m.write()? != es[at].data {
         return Err(E::Format("key ring text: PouchContent.msbt does not round trip"));
     }
-    for r in &RINGS {
+    for r in rings {
         for (suffix, text) in lines(r) {
             m.put_markup(&label(r, suffix), &text)?;
         }
@@ -53,9 +57,12 @@ pub fn apply(raw: &[u8]) -> Res<Vec<u8>> {
 
 /// Stages the text edit onto the already staged language archive, so hints, dungeon item text and
 /// the other text stages are kept.
-pub fn stage(rf: &mut Romfs, work: &P, more: &mut Vec<Out>) -> Res<()> {
+pub fn stage(rf: &mut Romfs, work: &P, more: &mut Vec<Out>, rings: &[&Ring]) -> Res<()> {
+    if rings.is_empty() {
+        return Ok(());
+    }
     for f in crate::hints::languages(rf)? {
-        crate::staging::edit_staged(rf, more, work, &f, true, apply)?;
+        crate::staging::edit_staged(rf, more, work, &f, true, |raw| apply_with(raw, rings))?;
     }
     Ok(())
 }
@@ -83,7 +90,7 @@ mod tests {
     fn every_ring_gets_four_nonempty_texts_that_name_the_dungeon() {
         let es: Vec<sarc::Entry> = sarc::parse(&apply(&archive()).unwrap()).unwrap();
         let m: Msbt = msbt::parse(&sarc::get(&es, POUCH_MSG).unwrap().data).unwrap();
-        for r in &RINGS {
+        for r in crate::key_rings::all_with_hideout() {
             for (suffix, _) in lines(r) {
                 let s: String = msbt::to_markup(&m.text(&label(r, suffix)).unwrap_or_else(|e| panic!("{}: {e}", r.actor)));
                 assert!(!s.is_empty(), "{}", r.actor);
@@ -95,7 +102,7 @@ mod tests {
 
     #[test]
     fn the_pouch_name_matches_the_item_name_in_the_spoiler_log() {
-        for r in &RINGS {
+        for r in crate::key_rings::all_with_hideout() {
             let name: String = lines(r)[0].1.clone();
             assert_eq!(name, r.item);
         }

@@ -231,6 +231,24 @@ fn active_rings(
 pub const KEY_LAYOUTS: [&str; 3] = ["fire_key_layout", "water_key_layout", "spirit_key_layout"];
 
 impl Plan {
+    /// Standard rings selected for this seed, plus the manually toggled Hideout ring. Shared build
+    /// code uses this; the settings-driven ring selection paths use `active_rings` only.
+    pub fn all_rings(&self) -> Vec<&'static crate::key_rings::Ring> {
+        let mut out: Vec<&'static crate::key_rings::Ring> = if self.rings {
+            if self.active_rings.is_empty() {
+                crate::key_rings::all()
+            } else {
+                self.active_rings.clone()
+            }
+        } else {
+            Vec::new()
+        };
+        if self.hideout_ring {
+            out.push(&crate::key_rings::HIDEOUT_RING);
+        }
+        out
+    }
+
     pub fn keys_roam(&self) -> bool {
         self.keys.small.roams()
     }
@@ -269,6 +287,9 @@ impl Plan {
             for r in &self.active_rings {
                 out.push((r.select, "true"));
             }
+        }
+        if self.hideout_ring {
+            out.push((crate::key_rings::HIDEOUT_SETTING, "true"));
         }
         if self.hideout != Keep::Vanilla {
             let mode: &str = match self.hideout {
@@ -420,8 +441,8 @@ pub fn plan_with_seed(s: &Settings, seed: Option<&str>) -> Res<Plan> {
     if hideout != Keep::Vanilla && open.fortress != crate::open_world::Fortress::Open {
         bad.push("shuffle_hideoutkeys needs gerudo_fortress=open; the four native drops are only rewired for the already-cleared fortress".to_string());
     }
-    if hideout_ring && hideout == Keep::Vanilla {
-        bad.push("hideout_key_rings is on while shuffle_hideoutkeys is vanilla; the Hideout ring needs shuffled Hideout keys".to_string());
+    if hideout_ring && !s.text("shuffle_hideoutkeys").is_ok_and(|v| v == "keysanity") {
+        bad.push("hideout_key_rings needs shuffle_hideoutkeys=keysanity; the Hideout ring replaces the four shuffled Hideout keys".to_string());
     }
     if hideout_ring && open.fortress != crate::open_world::Fortress::Open {
         bad.push("hideout_key_rings needs gerudo_fortress=open, like shuffled Hideout keys".to_string());
@@ -484,6 +505,7 @@ pub fn plan_with_seed(s: &Settings, seed: Option<&str>) -> Res<Plan> {
         (keys.small.roams(), "Small keys can be found in other dungeons or outside them. A chest key is counted for the dungeon it belongs to and the chest says which."),
         (rings, crate::key_rings::NOTE),
         (hideout != Keep::Vanilla, "Thieves' Hideout Small Keys are shuffled. The four native key drops hold shuffled non-key items."),
+        (hideout_ring, "The four Thieves' Hideout keys become one manually enabled Hideout key ring."),
         (gates.forest != Forest::Closed, "Kokiri Forest starts open. The blocker walls are switched off when a new game starts."),
         (gates.kakariko, "The Kakariko gate starts open and the castle visit is skipped. A new game sets the castle quest complete, the Door of Time quest past Impa's send off, the Fire Stone quest past the gate and the gate guard's flag, and gives the items of Zelda's Letter and the Song from Impa."),
         (gates.door, "The Door of Time starts open. The Temple of Time logic is edited so the door is always open and the Master Sword can be drawn without the Door of Time quest, and the door's opened flag is set when a new game starts, so the Ocarina and the Song of Time are not needed to reach the Master Sword. The quest itself is left alone, so Zelda's escape and the Song of Time stay checks, and the adult pedestal works before the Forest Sage so you can return to childhood at any time."),
@@ -740,10 +762,16 @@ mod tests {
         assert!(p.hideout_ring);
         assert!(!p.rings);
         assert!(p.active_rings.is_empty());
+        assert_eq!(p.all_rings().iter().map(|r| r.item).collect::<Vec<_>>(), ["Small Key Ring (Thieves Hideout)"]);
+        assert!(p.logic().contains(&("hideout_key_rings", "true")));
+        assert!(p.logic().contains(&("shuffle_hideoutkeys", "keysanity")));
+        assert!(p.notes.iter().any(|n| n.contains("one manually enabled Hideout key ring")));
 
-        s.set("shuffle_hideoutkeys", Value::s("vanilla")).unwrap();
-        let e: String = plan_with_seed(&s, Some("seed")).err().unwrap().to_string();
-        assert!(e.contains("hideout_key_rings is on while shuffle_hideoutkeys is vanilla"), "{e}");
+        for bad in ["vanilla", "regional", "overworld", "any_dungeon"] {
+            s.set("shuffle_hideoutkeys", Value::s(bad)).unwrap();
+            let e: String = plan_with_seed(&s, Some("seed")).err().unwrap().to_string();
+            assert!(e.contains("hideout_key_rings needs shuffle_hideoutkeys=keysanity"), "{e}");
+        }
 
         s.set("shuffle_hideoutkeys", Value::s("keysanity")).unwrap();
         s.set("gerudo_fortress", Value::s("normal")).unwrap();

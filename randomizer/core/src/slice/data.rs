@@ -166,9 +166,10 @@ pub fn parse_items(t: &str) -> Res<Vec<Item>> {
                 .unwrap_or_default(),
         });
     }
-    // items.json already reserves the ring names as unmapped logic placeholders. Give the eight
-    // standard rings a generated pickup actor at runtime without changing the data file audit.
-    for r in crate::key_rings::RINGS {
+    // items.json already reserves the ring names as unmapped logic placeholders. Give every ring,
+    // including the manually toggled Hideout ring, a generated pickup actor at runtime without
+    // changing the data file audit.
+    for r in crate::key_rings::all_with_hideout() {
         let Some(item) = out.iter_mut().find(|i| i.name == r.item) else {
             continue;
         };
@@ -416,9 +417,9 @@ mod tests {
     }
 
     #[test]
-    fn standard_rings_become_generated_items_without_duplicate_rows() {
+    fn rings_become_generated_items_without_duplicate_rows() {
         let d: Data = Data::load().unwrap();
-        for r in crate::key_rings::RINGS {
+        for r in crate::key_rings::all_with_hideout() {
             let i: &Item = d.item(r.item).unwrap();
             assert_eq!(i.kind, "Item", "{}", r.item);
             assert_eq!(i.actor.as_deref(), Some(crate::key_rings::pack(r.actor).as_str()), "{}", r.item);
@@ -431,7 +432,7 @@ mod tests {
             d.items.iter().filter(|i| i.name == "Small Key Ring (Forest Temple)").count(),
             1
         );
-        assert!(d.item("Small Key Ring (Thieves Hideout)").is_some_and(|i| i.kind != "Item"));
+        assert_eq!(d.items.iter().filter(|i| i.name == crate::key_rings::HIDEOUT_RING.item).count(), 1);
     }
 
     #[test]

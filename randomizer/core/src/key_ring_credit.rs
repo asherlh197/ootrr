@@ -123,6 +123,13 @@ fn ring(f: &mut Flow, r: &'static crate::key_rings::Ring, next: u16) -> Res<u16>
 /// Builds one ring-check chain ending at a one-frame wait. The chain is shared by the world-pickup
 /// entry and the shop entry; the ordinary item-get entry is deliberately left alone.
 pub fn patch(f: &mut Flow) -> Res<()> {
+    patch_with(f, &crate::key_rings::RINGS.iter().collect::<Vec<_>>())
+}
+
+pub fn patch_with(f: &mut Flow, rings: &[&'static crate::key_rings::Ring]) -> Res<()> {
+    if rings.is_empty() {
+        return Ok(());
+    }
     if f.events.iter().any(|e| e.name.starts_with(PREFIX)) {
         return Ok(());
     }
@@ -138,7 +145,7 @@ pub fn patch(f: &mut Flow) -> Res<()> {
         }),
     })?;
     let mut first: u16 = wait;
-    for r in crate::key_rings::RINGS.iter().rev() {
+    for r in rings.iter().rev() {
         first = ring(f, r, first)?;
     }
     f.entries.push(Entry { name: WORLD_ENTRY.to_string(), subs: Vec::new(), vars: Vec::new(), main: first, pad });
@@ -147,9 +154,9 @@ pub fn patch(f: &mut Flow) -> Res<()> {
     Ok(())
 }
 
-pub fn patch_bf(b: &mut Bf) -> Res<()> {
+pub fn patch_bf(b: &mut Bf, rings: &[&'static crate::key_rings::Ring]) -> Res<()> {
     let f: &mut Flow = b.flows.iter_mut().find(|x| x.name == FLOW).ok_or_else(|| E::Msg(format!("key rings: no {FLOW} flow")))?;
-    patch(f)
+    patch_with(f, rings)
 }
 
 /// Points a world-pickup flow's `ActionGuide` sub call at the ring-checked entry.
@@ -178,17 +185,25 @@ pub fn redirect_bf(b: &mut Bf, file: &str) -> Res<()> {
 
 /// Stages the credit on top of the no-tutorials patch. The new entry lives in the `ActionGuide`
 /// flow; only the two world-pickup get flows are redirected to it, leaving chests and gifts alone.
-pub fn stage_flows(rf: &mut Romfs, late: &mut Vec<Out>, work: &std::path::Path) -> Res<()> {
-    crate::story_skip::stage_late(rf, late, work, FLOW, patch_bf)?;
+pub fn stage_flows(rf: &mut Romfs, late: &mut Vec<Out>, work: &std::path::Path, rings: &[&'static crate::key_rings::Ring]) -> Res<()> {
+    if rings.is_empty() {
+        return Ok(());
+    }
+    crate::story_skip::stage_late(rf, late, work, FLOW, |b| patch_bf(b, rings))?;
     for file in ["Dm_SY_Get", "Dm_SY_Get_WithoutPlayer"] {
         crate::story_skip::stage_late(rf, late, work, file, |b| redirect_bf(b, file))?;
     }
     Ok(())
 }
 
+#[cfg(test)]
 fn flag_pairs() -> Vec<(String, u32)> {
+    flag_pairs_with(&crate::key_rings::RINGS.iter().collect::<Vec<_>>())
+}
+
+fn flag_pairs_with(rings: &[&'static crate::key_rings::Ring]) -> Vec<(String, u32)> {
     let mut out: Vec<(String, u32)> = Vec::new();
-    for r in crate::key_rings::RINGS {
+    for r in rings {
         let got: String = crate::key_rings::got_flag(r.actor);
         let applied: String = crate::key_rings::applied_flag(r.folder);
         out.push((got.clone(), crate::flags::hash_name(&got)));
@@ -214,7 +229,12 @@ fn is_our_row(r: &Node, h: u32) -> bool {
 /// The native pouch add writes `IsGet.<actor>` through the `IsGet` struct: member `hash(actor)`
 /// points at the saved Bool `hash("IsGet." + actor)`. A generated ring has no vanilla struct member,
 /// so without this the get event can put the ring in the pouch and still leave our held check false.
+#[cfg(test)]
 fn add_isget_members(y: &mut Byml) -> Res<()> {
+    add_isget_members_with(y, &crate::key_rings::RINGS.iter().collect::<Vec<_>>())
+}
+
+fn add_isget_members_with(y: &mut Byml, rings: &[&'static crate::key_rings::Ring]) -> Res<()> {
     let isget: u32 = crate::flags::hash_name("IsGet");
     let structs: &mut Vec<Node> = y
         .root
@@ -228,7 +248,7 @@ fn add_isget_members(y: &mut Byml) -> Res<()> {
         .and_then(|s| s.get_mut("DefaultValue"))
         .and_then(|v| v.as_arr_mut())
         .ok_or_else(|| E::Format("key rings: the game data list has no IsGet struct"))?;
-    for r in crate::key_rings::RINGS {
+    for r in rings {
         let member: u32 = crate::flags::hash_name(r.actor);
         let flag: u32 = crate::flags::hash_name(&crate::key_rings::got_flag(r.actor));
         if let Some(row) = members.iter().find(|m| row_hash(m) == Some(member)) {
@@ -245,7 +265,12 @@ fn add_isget_members(y: &mut Byml) -> Res<()> {
     Ok(())
 }
 
+#[cfg(test)]
 fn add_rows(y: &mut Byml) -> Res<()> {
+    add_rows_with(y, &crate::key_rings::RINGS.iter().collect::<Vec<_>>())
+}
+
+fn add_rows_with(y: &mut Byml, rings: &[&'static crate::key_rings::Ring]) -> Res<()> {
     let rows: &mut Vec<Node> = y
         .root
         .get_mut("Data")
@@ -257,7 +282,7 @@ fn add_rows(y: &mut Byml) -> Res<()> {
         .find(|r| row_hash(r) == Some(BASE_ROW))
         .cloned()
         .ok_or_else(|| E::Format("key rings: the game data list has no saved Bool template"))?;
-    for (name, h) in flag_pairs() {
+    for (name, h) in flag_pairs_with(rings) {
         if let Some(row) = rows.iter().find(|r| row_hash(r) == Some(h)) {
             if !is_our_row(row, h) {
                 return Err(E::Msg(format!("key rings: the flag {name} clashes with a game flag")));
@@ -274,32 +299,32 @@ fn add_rows(y: &mut Byml) -> Res<()> {
     Ok(())
 }
 
-pub fn add_runtime_rows(raw: &[u8]) -> Res<Vec<u8>> {
+pub fn add_runtime_rows(raw: &[u8], rings: &[&'static crate::key_rings::Ring]) -> Res<Vec<u8>> {
     let mut y: Byml = Byml::parse(raw)?;
-    add_rows(&mut y)?;
-    add_isget_members(&mut y)?;
+    add_rows_with(&mut y, rings)?;
+    add_isget_members_with(&mut y, rings)?;
     y.write()
 }
 
-fn edit_raw(raw: &[u8]) -> Res<Vec<u8>> {
-    add_runtime_rows(raw)
+fn edit_raw(raw: &[u8], rings: &[&'static crate::key_rings::Ring]) -> Res<Vec<u8>> {
+    add_runtime_rows(raw, rings)
 }
 
 /// Stages the saved Bools the credit checks use and the `IsGet` members that make the game write
 /// them. Later GameDataList editors merge with this file.
-pub fn stage_rows(rf: &mut Romfs, more: &mut Vec<Out>, enabled: bool) -> Res<()> {
-    if !enabled {
+pub fn stage_rows(rf: &mut Romfs, more: &mut Vec<Out>, rings: &[&'static crate::key_rings::Ring]) -> Res<()> {
+    if rings.is_empty() {
         return Ok(());
     }
     match more.iter().position(|o| o.path == LIST) {
         Some(i) => {
             let id: Option<u32> = dict_id(&more[i].z);
             let raw: Vec<u8> = rf.zs.decompress(&more[i].z)?;
-            let out: Vec<u8> = edit_raw(&raw)?;
+            let out: Vec<u8> = edit_raw(&raw, rings)?;
             more[i].new = out.len();
             more[i].z = zs::compress_raw(&out, id)?;
         }
-        None => more.push(rewrite(rf, LIST, edit_raw)?),
+        None => more.push(rewrite(rf, LIST, |raw| edit_raw(raw, rings))?),
     }
     Ok(())
 }
@@ -311,7 +336,7 @@ mod tests {
     use crate::bfevfl::{Actor, Entry};
     use std::collections::{BTreeMap as BM, BTreeSet as BS};
 
-    const EXPECTED: [(&str, u32); 19] = [
+    const EXPECTED: [(&str, u32); 21] = [
         ("test", 0xba6bd213),
         ("DungeonInfo.ForestTemple.SmallKeyNum", 0x90237092),
         ("IsGet.Item_Dungeon_SmallKey", 0x154ef588),
@@ -323,6 +348,7 @@ mod tests {
         ("IsGet.Item_Ring_Well", 0xd5e3c18d),
         ("IsGet.Item_Ring_GTG", 0x5f62ae19),
         ("IsGet.Item_Ring_Ganon", 0x685bed59),
+        ("IsGet.Item_Ring_Hideout", 0x56844297),
         ("OOTRR_KeyRing.ForestTemple", 0x2cffcc4f),
         ("OOTRR_KeyRing.FireTemple", 0x4e79f9b5),
         ("OOTRR_KeyRing.WaterTemple", 0xeba9f19f),
@@ -331,6 +357,7 @@ mod tests {
         ("OOTRR_KeyRing.BottomOfTheWell", 0x0607308e),
         ("OOTRR_KeyRing.GerudoTrainingGround", 0x26517f00),
         ("OOTRR_KeyRing.InsideGanonCastle", 0x97150d07),
+        ("OOTRR_KeyRing.GerudoFortress", 0x22c11c3d),
     ];
 
     fn actor(name: &str, acts: &[&str], queries: &[&str]) -> Actor {
@@ -430,6 +457,51 @@ mod tests {
         let before: Flow = f.clone();
         patch(&mut f).unwrap();
         assert_eq!(f, before, "the credit is added once");
+    }
+
+    #[test]
+    fn the_hideout_ring_is_checked_and_credited_like_a_standard_ring() {
+        let mut f: Flow = action_guide();
+        let rings: Vec<&'static crate::key_rings::Ring> = vec![&crate::key_rings::HIDEOUT_RING];
+        patch_with(&mut f, &rings).unwrap();
+        let wait: usize = guide_wait(&f);
+        let entry: &Entry = f.entries.iter().find(|e| e.name == WORLD_ENTRY).unwrap();
+        let mut at: usize = entry.main as usize;
+        let mut applied: BS<String> = BS::new();
+        let mut held: BS<String> = BS::new();
+        let mut four: bool = false;
+        for _ in 0..f.events.len() {
+            if at == wait {
+                break;
+            }
+            match &f.events[at].kind {
+                Kind::Switch { params, cases, .. } => {
+                    let c: &Cont = params.as_ref().unwrap();
+                    let Some(Val::Str(name)) = c.get("GameDataName") else { panic!("a ring switch needs a flag") };
+                    if name.starts_with("OOTRR_KeyRing.") {
+                        applied.insert(name.clone());
+                    } else if name.starts_with("IsGet.") {
+                        held.insert(name.clone());
+                    }
+                    let answer: u32 = if name.starts_with("OOTRR_KeyRing.") { 1 } else { 0 };
+                    at = cases.iter().find(|c| c.val == answer).unwrap().ev as usize;
+                }
+                Kind::Action { next, params, .. } => {
+                    if let Some(c) = params
+                        && c.get("GameDataName") == Some(&Val::Str("DungeonInfo.GerudoFortress.SmallKeyNum".to_string()))
+                    {
+                        four = c.get("Value") == Some(&Val::Int(4));
+                    }
+                    at = *next as usize;
+                }
+                _ => panic!("unexpected ring credit event"),
+            }
+        }
+        assert_eq!(applied.len(), 1);
+        assert_eq!(held.len(), 1);
+        assert!(applied.contains(&crate::key_rings::applied_flag("GerudoFortress")));
+        assert!(held.contains(&crate::key_rings::got_flag("Item_Ring_Hideout")));
+        assert!(four, "the Hideout ring writes four keys");
     }
 
     #[test]

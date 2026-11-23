@@ -123,7 +123,7 @@ pub(crate) fn actors_for(d: &Data, seed: &SeedFile) -> Res<BM<String, String>> {
         }
         // A ring has no vanilla chest actor: its generated pickup pack supplies one for every
         // chest or gift that holds it.
-        if let Some(r) = crate::key_rings::by_item(item) {
+        if let Some(r) = crate::key_rings::by_item_any(item) {
             let made: String = crate::key_rings::pack(r.actor);
             while acts.len() < locs.len() {
                 acts.push(made.clone());

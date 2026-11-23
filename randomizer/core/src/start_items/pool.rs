@@ -269,6 +269,18 @@ mod tests {
                 }
             }
         }
+        let s: Settings = with(&[
+            ("shuffle_hideoutkeys", Value::s("keysanity")),
+            ("gerudo_fortress", Value::s("open")),
+            (crate::key_rings::HIDEOUT_SETTING, Value::Bool(true)),
+        ]);
+        for n in 0..3 {
+            let g = beatable(&d, &s, &format!("hideout ring count {n}"));
+            let keys: usize = g.seed_file.placements.values().filter(|v| v.as_str() == "Small Key (Thieves Hideout)").count();
+            let rings: usize = g.seed_file.placements.values().filter(|v| v.as_str() == crate::key_rings::HIDEOUT_RING.item).count();
+            assert_eq!(keys, 0, "hideout ring {n} still places {keys} individual Hideout keys");
+            assert_eq!(rings, 1, "hideout ring {n} places {rings} Hideout rings");
+        }
     }
 
     #[test]

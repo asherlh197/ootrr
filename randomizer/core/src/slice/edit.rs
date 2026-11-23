@@ -156,6 +156,7 @@ pub fn build_with(seed: &SeedFile, romfs: &P, load: &P, mod_name: &str, host: Ho
     }
     let roam: bool = p.keys_roam();
     let hideout: bool = p.hideout != Keep::Vanilla;
+    let hideout_ring: bool = p.hideout_ring;
     let gift_keys: Vec<crate::gift_keys::Gift> = crate::gift_keys::gifts(&d, seed)?;
     let key_cs: Vec<crate::debug_names::KeyCredit> = crate::debug_names::key_credits(&d, seed);
     // Dungeon items at NPCs with their own events, sale offers, story chests and the Treasure
@@ -179,7 +180,8 @@ pub fn build_with(seed: &SeedFile, romfs: &P, load: &P, mod_name: &str, host: Ho
         }
     }
     let mut keys: Vec<&'static str> = if roam { KEY_DUNGEONS.to_vec() } else { Vec::new() };
-    if hideout && !keys.contains(&"GerudoFortress") {
+    // A Hideout ring credits GerudoFortress through the ring folders, not this ordinary key path.
+    if hideout && !hideout_ring && !keys.contains(&"GerudoFortress") {
         keys.push("GerudoFortress");
     }
     for k in crate::gift_keys::small_dungeons(&gift_keys) {
@@ -216,7 +218,7 @@ pub fn build_with(seed: &SeedFile, romfs: &P, load: &P, mod_name: &str, host: Ho
             b
         });
         let raw: &[u8] = resized.as_deref().unwrap_or(&vanilla);
-        let e: Option<Edited> = edit_file_with(&f, raw, &ts, roam || p.rings, &small_hearts, &lifts, &wrapped_chests)?;
+        let e: Option<Edited> = edit_file_with(&f, raw, &ts, roam || p.rings || hideout_ring, &small_hearts, &lifts, &wrapped_chests)?;
         let e: Option<Edited> = match (e, &resized) {
             (Some(mut e), Some(_)) => {
                 e.old_len = vanilla.len();
@@ -298,10 +300,13 @@ pub fn build_with(seed: &SeedFile, romfs: &P, load: &P, mod_name: &str, host: Ho
     let placed: BM<String, &'static str> = flow_wraps(&d, seed);
     let chest_fams: BS<&str> = upgrades.iter().map(|u| u.0.as_str()).collect();
     let gs: Vec<crate::progressive::Grant> = wrap_grants(&d, seed, &chest_fams, &placed);
-    if !upgrades.is_empty() || roam || hideout || p.rings || gr.active() || !passes.silver_used.is_empty() {
-        let mut outs: Vec<crate::staging::Out> = if !upgrades.is_empty() || roam || hideout || p.rings {
-            let ring_folders: &[&'static str] = if p.rings { &crate::key_rings::FOLDERS } else { &[] };
-            crate::progressive::stage_with(&mut rf, &upgrades, None, &kids, &keys, ring_folders)?
+    if !upgrades.is_empty() || roam || hideout || p.rings || hideout_ring || gr.active() || !passes.silver_used.is_empty() {
+        let mut outs: Vec<crate::staging::Out> = if !upgrades.is_empty() || roam || hideout || p.rings || hideout_ring {
+            let mut ring_folders: Vec<&'static str> = if p.rings { crate::key_rings::FOLDERS.to_vec() } else { Vec::new() };
+            if hideout_ring && !ring_folders.contains(&crate::key_rings::HIDEOUT_RING.folder) {
+                ring_folders.push(crate::key_rings::HIDEOUT_RING.folder);
+            }
+            crate::progressive::stage_with(&mut rf, &upgrades, None, &kids, &keys, &ring_folders)?
         } else {
             Vec::new()
         };
@@ -522,8 +527,8 @@ pub fn build_with(seed: &SeedFile, romfs: &P, load: &P, mod_name: &str, host: Ho
     crate::dungeon_fixes::stage(&mut rf, &mut late, &work)?;
     // World pickups call a separate, ring-checked ActionGuide entry after the pouch add, so the
     // saved IsGet bool is current without putting ring checks in the chest and gift item-get path.
-    if p.rings {
-        crate::key_ring_credit::stage_flows(&mut rf, &mut late, &work)?;
+    if p.rings || hideout_ring {
+        crate::key_ring_credit::stage_flows(&mut rf, &mut late, &work, &p.all_rings())?;
     }
     if p.short {
         crate::short_get::stage(&mut rf, &mut late, &work)?;

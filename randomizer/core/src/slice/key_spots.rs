@@ -155,7 +155,7 @@ fn family(i: &Item) -> Option<&'static str> {
 fn content_of(i: &Item) -> String {
     // Rings have a generated pack actor in `Item.actor`; their catalog/pouch identity stays the
     // `Item_Ring_*` actor the get flows name after the pouch add.
-    crate::key_rings::by_item(&i.name).map(|r| r.actor.to_string()).unwrap_or_else(|| i.actor.clone().unwrap_or_default())
+    crate::key_rings::by_item_any(&i.name).map(|r| r.actor.to_string()).unwrap_or_else(|| i.actor.clone().unwrap_or_default())
 }
 
 pub fn contents(d: &Data, item: &str) -> Vec<String> {
@@ -242,7 +242,7 @@ pub fn world_spot(d: &Data, loc: &str) -> bool {
 }
 
 pub fn resolve_drop(d: &Data, item: &str, tier: Option<&str>) -> Res<Pick> {
-    let Some(r) = crate::key_rings::by_item(item) else {
+    let Some(r) = crate::key_rings::by_item_any(item) else {
         return resolve_kit(d, item, tier);
     };
     // A ring has no upgrade tiers. A world spot may still carry a tier chosen for its usual
@@ -252,7 +252,7 @@ pub fn resolve_drop(d: &Data, item: &str, tier: Option<&str>) -> Res<Pick> {
 }
 
 pub fn resolve_at(d: &Data, loc: &str, item: &str, tier: Option<&str>) -> Res<Pick> {
-    if crate::key_rings::is_ring(item) && world_spot(d, loc) {
+    if crate::key_rings::is_any_ring(item) && world_spot(d, loc) {
         resolve_drop(d, item, tier)
     } else if crate::slice::skulls::is_skull(d, loc) {
         resolve_kit(d, item, tier)
@@ -459,14 +459,15 @@ mod tests {
     }
 
     #[test]
-    fn all_eight_rings_resolve_to_generated_packs_at_every_pickup_spot() {
+    fn all_rings_resolve_to_generated_packs_at_every_pickup_spot() {
         let d: Data = d();
         let pot: String = d.pots.state.iter().filter(|(n, s)| **s == crate::slice::data::State::Eligible && crate::slice::copies::copies(&d, n) < 2).map(|(n, _)| n.clone()).min().unwrap();
         let free: &str = "LLR Freestanding PoH";
         let skull: &str = "KF GS Bean Patch";
         let chest: &str = "KF Midos Top Left Chest";
         let gift: &str = "LW Gift from Saria";
-        for r in crate::key_rings::RINGS {
+        let native: &str = crate::hideout_keys::NATIVE[0];
+        for r in crate::key_rings::all_with_hideout() {
             let event_pack: String = crate::key_rings::pack(r.actor);
             assert_eq!(contents(&d, r.item), vec![r.actor.to_string()], "{}", r.item);
             let p: Pick = resolve(&d, r.item, None).unwrap_or_else(|e| panic!("{}: {e}", r.item));
@@ -479,7 +480,7 @@ mod tests {
                 assert_eq!(resolve_at(&d, loc, r.item, None).unwrap().pack, event_pack, "{} at {loc}", r.item);
             }
 
-            let drop_pack: String = crate::key_rings::drop_pack(r.actor);
+            let drop_pack: String = crate::key_rings::drop_pack_any(r.actor);
             let drop: Pick = resolve_drop(&d, r.item, None).unwrap_or_else(|e| panic!("{} drop: {e}", r.item));
             assert_eq!(drop.content, r.drop_item, "{}", r.item);
             assert_eq!(drop.pack, drop_pack, "{}", r.item);
@@ -490,7 +491,7 @@ mod tests {
             assert_eq!(ds.identity_override(), Some(r.actor), "{}", r.item);
             assert_eq!(dl.ring.as_deref(), Some(r.actor), "{}", r.item);
             assert!(dl.drop_ring, "{}", r.item);
-            for loc in [pot.as_str(), free, skull] {
+            for loc in [pot.as_str(), free, skull, native] {
                 assert_eq!(resolve_at(&d, loc, r.item, None).unwrap().pack, drop_pack, "{} at {loc}", r.item);
             }
             for at in [Spot::Free, Spot::Pot, Spot::Skull] {

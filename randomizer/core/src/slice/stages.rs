@@ -98,8 +98,8 @@ fn dungeon_text(rf: &mut Romfs, c: &Ctx, more: &mut Vec<Out>) -> Res<()> {
 }
 
 fn key_ring_text(rf: &mut Romfs, c: &Ctx, more: &mut Vec<Out>) -> Res<()> {
-    if c.p.rings {
-        crate::key_ring_text::stage(rf, c.work, more)?;
+    if c.p.rings || c.p.hideout_ring {
+        crate::key_ring_text::stage(rf, c.work, more, &c.p.all_rings())?;
     }
     Ok(())
 }
@@ -138,7 +138,7 @@ fn door_fix(rf: &mut Romfs, c: &Ctx, more: &mut Vec<Out>) -> Res<()> {
 }
 
 fn no_tutorials(rf: &mut Romfs, c: &Ctx, more: &mut Vec<Out>) -> Res<()> {
-    more.push(crate::no_tutorials::stage(rf, c.p.rings)?);
+    more.push(crate::no_tutorials::stage(rf, c.p.rings || c.p.hideout_ring)?);
     Ok(())
 }
 
@@ -230,7 +230,7 @@ fn hideout_drop_rows(rf: &mut Romfs, c: &Ctx, more: &mut Vec<Out>) -> Res<()> {
 }
 
 fn key_ring_flags(rf: &mut Romfs, c: &Ctx, more: &mut Vec<Out>) -> Res<()> {
-    crate::key_ring_credit::stage_rows(rf, more, c.p.rings)
+    crate::key_ring_credit::stage_rows(rf, more, &c.p.all_rings())
 }
 
 fn start_defaults(rf: &mut Romfs, c: &Ctx, more: &mut Vec<Out>) -> Res<()> {

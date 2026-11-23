@@ -84,6 +84,48 @@ pub fn replace_with(
     Ok(())
 }
 
+/// The manually toggled Hideout ring replaces the four shuffled Hideout keys with one ring. It is
+/// independent of `p.rings` and never joins `p.active_rings`.
+pub fn replace_hideout(
+    d: &Data,
+    w: &World,
+    p: &Plan,
+    base: &mut Placement,
+    free: &[LocId],
+    ok: &dyn Fn(ItemId, LocId) -> bool,
+    notes: &mut Vec<String>,
+) -> Res<()> {
+    if !p.hideout_ring {
+        return Ok(());
+    }
+    let r: &'static crate::key_rings::Ring = &crate::key_rings::HIDEOUT_RING;
+    let junk: ItemId = w.item(JUNK).ok_or_else(|| E::Msg(format!("{JUNK} is not in the logic item list")))?;
+    let key: ItemId = w.item(r.key).ok_or_else(|| E::Msg(format!("{} is not in the logic item list", r.key)))?;
+    let ring: ItemId = w.item(r.item).ok_or_else(|| E::Msg(format!("{} is not in the logic item list", r.item)))?;
+    let old: Vec<LocId> = w.real.iter().copied().filter(|l| base.get(*l) == Some(key)).collect();
+    if old.len() != r.count as usize {
+        return Err(E::Msg(format!("key rings: Hideout has {} small keys to replace, expected {}", old.len(), r.count)));
+    }
+    let primary: Option<LocId> = old.iter().copied().find(|l| free.contains(l) && ok(ring, *l));
+    let spare: Option<LocId> = primary.or_else(|| {
+        free.iter().copied().find(|l| {
+            ok(ring, *l)
+                && base.get(*l).is_some_and(|i| i == junk || d.item(&w.items.names[i]).is_some_and(|it| !it.adv))
+        })
+    });
+    let Some(at): Option<LocId> = spare else {
+        return Err(E::Msg(format!("key rings: no free spot can hold {}", r.item)));
+    };
+    for l in &old {
+        base.put(*l, junk);
+    }
+    base.put(at, ring);
+    notes.push(format!(
+        "The four Thieves' Hideout small keys were replaced by one Hideout key ring. The former key slots hold {JUNK} unless one holds its ring."
+    ));
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -189,6 +231,71 @@ mod tests {
         let ok = |it: ItemId, l: LocId| allowed(&d, &w, &p, it, l);
         let mut notes: Vec<String> = Vec::new();
         replace(&d, &w, &p, &mut base, &pk.free, &ok, &mut notes).unwrap();
+        assert_eq!(base.item, original);
+        assert!(notes.is_empty());
+    }
+
+    fn setup_hideout() -> Res<(Data, World, Plan, Placement, crate::slice::pick::Pick)> {
+        let mut s: Settings = Settings::default();
+        s.set("gerudo_fortress", Value::s("open"))?;
+        s.set("shuffle_hideoutkeys", Value::s("keysanity"))?;
+        s.set(crate::key_rings::HIDEOUT_SETTING, Value::Bool(true))?;
+        let d: Data = Data::load()?;
+        let p: Plan = plan(&s)?;
+        let w: World = world_with(&d, &p.logic())?;
+        let v: Placement = crate::slice::fill::vanilla_place(&w, &d)?;
+        let pk: crate::slice::pick::Pick = pick(&d, &w, &p);
+        Ok((d, w, p, v, pk))
+    }
+
+    #[test]
+    fn a_hideout_ring_grants_its_full_key_count_in_logic() {
+        let (_, w, p, _, _): (Data, World, Plan, Placement, crate::slice::pick::Pick) = setup_hideout().unwrap();
+        let r: &'static crate::key_rings::Ring = &crate::key_rings::HIDEOUT_RING;
+        assert_eq!(p.all_rings().len(), 1);
+        assert!(p.active_rings.is_empty());
+        let mut s: Search = Search::new(&w);
+        let key: ItemId = w.item(r.key).unwrap();
+        let ring: ItemId = w.item(r.item).unwrap();
+        let before: u32 = s.cnt[key];
+        s.add(ring, 1);
+        assert_eq!(s.cnt[key], before + r.count);
+        s.remove(ring);
+        assert_eq!(s.cnt[key], before);
+    }
+
+    #[test]
+    fn the_hideout_ring_replaces_four_hideout_keys() {
+        let (d, w, p, v, pk): (Data, World, Plan, Placement, crate::slice::pick::Pick) = setup_hideout().unwrap();
+        let (mut base, _): (Placement, Vec<String>) = pool::base(&d, &w, &p, &v, &pk.free).unwrap();
+        let ok = |it: ItemId, l: LocId| allowed(&d, &w, &p, it, l);
+        let mut notes: Vec<String> = Vec::new();
+        replace_hideout(&d, &w, &p, &mut base, &pk.free, &ok, &mut notes).unwrap();
+        let r: &'static crate::key_rings::Ring = &crate::key_rings::HIDEOUT_RING;
+        let key: ItemId = w.item(r.key).unwrap();
+        let ring: ItemId = w.item(r.item).unwrap();
+        assert_eq!(base.item.iter().filter(|i| **i == Some(key)).count(), 0);
+        assert_eq!(base.item.iter().filter(|i| **i == Some(ring)).count(), 1);
+        assert_eq!(base.item.len(), v.item.len());
+        assert_eq!(notes.len(), 1);
+        assert!(notes[0].contains("Thieves' Hideout"));
+    }
+
+    #[test]
+    fn the_hideout_ring_is_untouched_when_its_toggle_is_off() {
+        let mut s: Settings = Settings::default();
+        s.set("gerudo_fortress", Value::s("open")).unwrap();
+        s.set("shuffle_hideoutkeys", Value::s("keysanity")).unwrap();
+        let d: Data = Data::load().unwrap();
+        let p: Plan = plan(&s).unwrap();
+        let w: World = world_with(&d, &p.logic()).unwrap();
+        let v: Placement = crate::slice::fill::vanilla_place(&w, &d).unwrap();
+        let pk: crate::slice::pick::Pick = pick(&d, &w, &p);
+        let (mut base, _): (Placement, Vec<String>) = pool::base(&d, &w, &p, &v, &pk.free).unwrap();
+        let original: Vec<Option<ItemId>> = base.item.clone();
+        let ok = |it: ItemId, l: LocId| allowed(&d, &w, &p, it, l);
+        let mut notes: Vec<String> = Vec::new();
+        replace_hideout(&d, &w, &p, &mut base, &pk.free, &ok, &mut notes).unwrap();
         assert_eq!(base.item, original);
         assert!(notes.is_empty());
     }
