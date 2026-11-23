@@ -111,6 +111,14 @@ pub fn allowed(d: &Data, w: &World, p: &Plan, it: ItemId, l: LocId) -> bool {
         return ok;
     }
     let here: Option<&str> = w.regions[w.locs[l].region].dungeon.as_deref();
+    if let Some(r) = crate::key_rings::by_item(&w.items.names[it]) {
+        return match p.keys.small {
+            Keep::Dungeon => here == Some(r.dungeon),
+            Keep::AnyDungeon => here.is_some(),
+            Keep::Vanilla => false,
+            Keep::Anywhere | Keep::Overworld | Keep::Regional | Keep::Start | Keep::Lacs => true,
+        };
+    }
     if scoped(p, &i.kind) {
         return i.dungeon.is_some() && i.dungeon.as_deref() == here;
     }
@@ -755,6 +763,75 @@ mod tests {
                     let here: Option<&str> = w.regions[w.locs[w.loc(loc).unwrap()].region].dungeon.as_deref();
                     assert_eq!(here, i.dungeon.as_deref(), "{item} at {loc}");
                 }
+            }
+        }
+    }
+
+    fn rings_settings(mode: &str) -> Settings {
+        let mut s: Settings = with(&[("shuffle_chests", "all"), ("shuffle_smallkeys", mode)]);
+        s.set(crate::key_rings::SETTING, Value::Bool(true)).unwrap();
+        s.set(crate::key_rings::MODE_SETTING, Value::s("all")).unwrap();
+        s
+    }
+
+    #[test]
+    fn key_rings_follow_the_small_key_scope() {
+        let d: Data = Data::load().unwrap();
+        for mode in ["dungeon", "any_dungeon", "keysanity"] {
+            let s: Settings = rings_settings(mode);
+            let p: Plan = plan(&s).unwrap();
+            let w: World = world_with(&d, &p.logic()).unwrap();
+            for n in 0..3 {
+                let g: Generated = generate_data(&d, &s, &format!("ring scope {mode} {n}"), &GenOpts::default()).unwrap();
+                assert!(rebuilt(&d, &p, &g.seed_file.placements), "{mode} {n} is not beatable");
+                for (loc, item) in &g.seed_file.placements {
+                    let Some(r) = crate::key_rings::by_item(item) else {
+                        continue;
+                    };
+                    let l: LocId = w.loc(loc).unwrap();
+                    let here: Option<&str> = w.regions[w.locs[l].region].dungeon.as_deref();
+                    match mode {
+                        "dungeon" => assert_eq!(here, Some(r.dungeon), "{item} at {loc}"),
+                        "any_dungeon" => assert!(here.is_some(), "{item} at {loc} is outside a dungeon"),
+                        _ => {}
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn key_rings_are_reachable_without_their_own_keys() {
+        let d: Data = Data::load().unwrap();
+        let s: Settings = rings_settings("keysanity");
+        let p: Plan = plan(&s).unwrap();
+        let w: World = world_with(&d, &p.logic()).unwrap();
+        for n in 0..3 {
+            let g: Generated = generate_data(&d, &s, &format!("ring reach {n}"), &GenOpts::default()).unwrap();
+            for (loc, item) in &g.seed_file.placements {
+                let Some(r) = crate::key_rings::by_item(item) else {
+                    continue;
+                };
+                let l: LocId = w.loc(loc).unwrap();
+                let mut without: Placement = vanilla_place(&w, &d).unwrap();
+                for i in 0..without.item.len() {
+                    let clear: bool = without.item[i].is_some_and(|held| {
+                        let name: &str = &w.items.names[held];
+                        name == r.key || crate::key_rings::by_item_any(name) == Some(r)
+                    });
+                    if clear {
+                        without.item[i] = None;
+                    }
+                }
+                for (other, held) in &g.seed_file.placements {
+                    let grants: bool = held == r.key || crate::key_rings::by_item_any(held) == Some(r);
+                    if !grants {
+                        without.put(w.loc(other).unwrap(), w.item(held).unwrap());
+                    }
+                }
+                let mut search: crate::search::Search = crate::search::Search::new(&w);
+                search.settle(&without, true);
+                assert!(search.loc_access(l), "{item} at {loc} needs its own key");
             }
         }
     }
