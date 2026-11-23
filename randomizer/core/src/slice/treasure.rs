@@ -19,12 +19,8 @@ pub const VANILLA: &str = "Obj_Heart_Piece";
 
 pub const NOTE: &str = "The Treasure Chest Game reward is shuffled. The first win gives the shuffled item once (its chest stays open) and every later win gives the vanilla red rupee. An upgrade there gives the tier fixed for it in the spoiler.";
 
-/// The chest's own flag: the first win chest is opened once, so the shuffled item is given once.
 pub const REPEAT_OPEN: &str = "IsEnableRepeatOpen";
 
-/// Every placed item may stand on the reward. The game only has a Lens preview of its own for
-/// the heart piece and the ornamental rupees; an item actor stands in for the rest, and any other
-/// actor (a pickup that could be taken) keeps the heart piece preview.
 const VIEWS: [(&str, &str); 4] = [
     ("Obj_Heart_Piece", "Obj_Heart_Piece_MiniGame"),
     ("TBox_Rupee_Green", "Obj_OrnamentalRupee_Green_MiniGame"),
@@ -77,9 +73,6 @@ pub fn set_view(y: &mut Byml, hash: u64, actor: &str) -> usize {
             continue;
         }
         d.set(VIEW, Node::Str(view_of(actor)));
-        // The first win chest re-closed on every new game, so a shuffled item could be won again
-        // before MiniGame_ChoiceTreasure_IsClear turned it into the red rupee chest. Opened once,
-        // its IsTreasureBoxOpen flag is saved with the item.
         d.set(REPEAT_OPEN, Node::Bool(false));
         n += 1;
     }
@@ -186,7 +179,6 @@ mod tests {
         assert_eq!(view_of("Obj_Heart_Piece"), "Obj_Heart_Piece_MiniGame");
         assert_eq!(view_of("TBox_Rupee_Blue"), "Obj_OrnamentalRupee_Blue_MiniGame");
         assert_eq!(view_of("Item_Hammer"), "Item_Hammer");
-        // A pickup actor could be taken, so it keeps the heart piece preview.
         assert_eq!(view_of("Obj_Heart_Container"), "Obj_Heart_Piece_MiniGame");
         assert_eq!(view_of("TBox_ArrowBundle_Large"), "Obj_Heart_Piece_MiniGame");
     }
@@ -250,7 +242,6 @@ mod tests {
         const WATER: &str = "Water Temple Longshot Chest";
         let d: Data = Data::load().unwrap();
         let go = |x: &str| GenOpts { plando: vec![crate::slice::plando::parse(x).unwrap()], ..GenOpts::default() };
-        // The Hookshot and the reward trade places, so the two spots alone hold a full pool.
         let prize: &str = d.vanilla_of(LOC).unwrap();
         let swap = GenOpts { plando: vec![crate::slice::plando::parse(&format!("{LOC}=Progressive Hookshot")).unwrap(), crate::slice::plando::parse(&format!("{WATER}={prize}")).unwrap()], ..GenOpts::default() };
         let g: Generated = generate_data(&d, &on(), "p", &swap).unwrap();
@@ -259,7 +250,6 @@ mod tests {
         let order: crate::slice::tier_order::Verdict = crate::slice::tier_order::fixed_actors(&d, &g.seed_file).unwrap();
         let tier: &String = order.assign.get(LOC).unwrap();
         assert!(["Item_Hookshot", "Item_Longshot"].contains(&tier.as_str()), "{tier}");
-        // The build opens the reward chest's event first (with), as build_with does.
         let built: Data = with(Data::load().unwrap(), true);
         let mut only: crate::settings::seed::SeedFile = g.seed_file.clone();
         only.placements.retain(|l, _| l == LOC || l == WATER);

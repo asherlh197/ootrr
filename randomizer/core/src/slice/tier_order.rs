@@ -66,7 +66,6 @@ pub fn fixed_spot(d: &Data, loc: &str) -> bool {
         || crate::shops::is_loc(loc)
         || crate::slice::skulls::is_skull(d, loc)
         || crate::hideout_keys::is_native(loc)
-        // The Treasure Chest Game reward keeps its clear event, so it drops one fixed tier.
         || loc == crate::slice::treasure::LOC
         || d.cat.by_name(loc).is_some_and(|l| crate::slice::pickups::is_world(l) || l.kind == "bossheart")
 }

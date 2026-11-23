@@ -100,8 +100,6 @@ pub fn keeps(base: &[bool], got: &[bool]) -> bool {
 
 pub fn keys_fit(w: &World, h: &Have) -> bool {
     for (k, home) in &h.keys {
-        // Only dungeons with a movable entrance can be made self-locking by this shuffle.
-        // Hideout and Ganon's Castle keys have no entrance in the pool, so they cannot fail here.
         if find(home).is_none() {
             continue;
         }

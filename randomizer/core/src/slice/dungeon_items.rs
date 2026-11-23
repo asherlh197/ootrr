@@ -512,8 +512,6 @@ mod tests {
                 let Some(i) = d.item(item).filter(|i| Kind::of(&i.kind).is_some_and(|k| gr.sweep.contains(&k))) else {
                     continue;
                 };
-                // A reward event holding a dungeon item (#24) is credited by crate::gift_keys, any
-                // other NPC or sale (a scrub too) by a location credit (crate::debug_names).
                 if d.flow.by_name(loc).is_some() {
                     continue;
                 }

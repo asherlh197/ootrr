@@ -200,8 +200,6 @@ mod tests {
         let fire: &crate::key_rings::Ring = crate::key_rings::by_choice("fire_temple").unwrap();
         let forest_ring: ItemId = w.item(forest.item).unwrap();
         assert_eq!(w.ring_key(forest_ring), Some((w.item(forest.key).unwrap(), forest.count as u32)));
-        // Inactive rings stay in their original item slots so old seeds keep their ids; they
-        // just are not rings and hand out no keys.
         let fire_ring: ItemId = w.item(fire.item).unwrap();
         assert!(w.ring_key(fire_ring).is_none());
 

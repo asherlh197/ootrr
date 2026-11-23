@@ -71,23 +71,14 @@ pub fn fits(d: &Data, name: &str, item: &str) -> bool {
     copies(d, name) < 2 || twice(item) || d.vanilla_of(name) == Some(item)
 }
 
-/// Kinds that remember a give by a flag of their own instead of the actor's save row, so their
-/// copies already give once (a scrub's sale flag, a cow's once flag).
 pub const FLAGGED: [&str; 2] = ["scrub", "cow"];
 
-/// The scene variant a Banc file belongs to: its static and dynamic layers load together and
-/// count as one, the child, adult and alternative variants count apart.
 pub fn scene(file: &str) -> &str {
     let stem: &str = file.rsplit('/').next().unwrap_or(file);
     let stem: &str = stem.split('.').next().unwrap_or(stem);
     stem.strip_suffix("_Static").or_else(|| stem.strip_suffix("_Dynamic")).unwrap_or(stem)
 }
 
-/// The hash every copy of a spot takes, and the copies that take it: (file, old hash). The game
-/// saves a picked up pickup, a broken pot and an opened chest by actor hash, and the vanilla game
-/// already shares one hash across scene variants (Mido's chests, Impa's heart piece), so a spot
-/// whose variants carry one hash each gives its item once. A variant holding several hashes
-/// (alternates the game shows one at a time) gives the primary hash, the others stay.
 pub fn plan(l: &Loc) -> Option<(u64, Vec<(String, u64)>)> {
     if FLAGGED.contains(&l.kind.as_str()) {
         return None;
@@ -120,8 +111,6 @@ pub fn plan(l: &Loc) -> Option<(u64, Vec<(String, u64)>)> {
     (!out.is_empty()).then_some((primary, out))
 }
 
-/// The rewrites a seed needs: (file, old hash) -> the spot's primary hash, for every spot with
-/// copies that holds an item a second copy would hand out again.
 pub fn shared(d: &Data, placements: &BM<String, String>) -> BM<(String, u64), u64> {
     let mut out: BM<(String, u64), u64> = BM::new();
     for (name, item) in placements {
@@ -164,8 +153,6 @@ fn holds(n: &Node, h: u64) -> bool {
     }
 }
 
-/// Gives every copy in one file the primary hash: the actor's Hash, its Phive placement ID and
-/// every link, AI group and delete group that names it.
 pub fn share_file(y: &mut Byml, file: &str, swaps: &[(u64, u64)]) -> Res<usize> {
     let mut n: usize = 0;
     for (old, new) in swaps {
@@ -181,8 +168,6 @@ pub fn share_file(y: &mut Byml, file: &str, swaps: &[(u64, u64)]) -> Res<usize> 
     Ok(n)
 }
 
-/// Applies crate::slice::copies::shared to the edited Banc files, reading any file no other pass
-/// touched. Runs after every other Banc pass, which find their actors by the vanilla hashes.
 pub fn share(rf: &mut Romfs, d: &Data, placements: &BM<String, String>, edits: &mut Vec<Edited>) -> Res<usize> {
     let mut by: BM<String, Vec<(u64, u64)>> = BM::new();
     for ((f, old), new) in shared(d, placements) {
@@ -255,9 +240,7 @@ mod tests {
         let ledge: &Loc = d.cat.by_name("KF West Ledge Chest").unwrap();
         let (primary, moved) = plan(ledge).unwrap();
         assert!(moved.iter().all(|(f, h)| f.contains("LostWood") && *h != primary), "{moved:?}");
-        // Two keys of one jail sit in one file: alternates, as in the vanilla game.
         assert!(plan(d.cat.by_name("Hideout 1 Torch Jail Gerudo Key").unwrap()).is_none());
-        // Scrubs and cows give once by a flag of their own.
         assert!(plan(d.cat.by_name("LW Deku Scrub Near Bridge").unwrap()).is_none());
         assert!(plan(d.cat.by_name("DMT Cow Grotto Cow").unwrap()).is_none());
         assert_eq!(scene("Banc/ShadowTemple/ShadowTemple_Static.bcett.byml.zs"), scene("Banc/ShadowTemple/ShadowTemple_Dynamic.bcett.byml.zs"));
@@ -276,7 +259,6 @@ mod tests {
         }
         let d: Data = Data::load().unwrap();
         let mut rf: Romfs = Romfs::open(&p).unwrap();
-        // A spot listed in both the catalog and the pot catalog gives the same swaps twice.
         let mut by: BM<String, BS<(u64, u64)>> = BM::new();
         let mut spots: usize = 0;
         for l in d.cat.locs.iter().chain(d.pots.locs.iter()) {

@@ -91,8 +91,6 @@ pub fn spec(d: &Data, over: &[(&str, &str)]) -> Res<Spec> {
             if active {
                 s.add_ring(r.item, r.key, r.count);
             } else {
-                // Keep the item in its original slot even when the ring is off; dropping it
-                // would shift every later logic item id and move the old pinned seeds.
                 s.add_item(&it.name, it.adv && (hearts || !heart), 0);
             }
             continue;
