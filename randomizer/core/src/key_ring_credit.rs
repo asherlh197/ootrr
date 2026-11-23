@@ -1,13 +1,13 @@
-//! Gives every small key of a dungeon when its key ring is picked up.
-//!
-//! World pickups add their actor before calling `ActionGuide`, and the get flow has written its
-//! saved `IsGet` bool by then. The credit checks therefore run in a separate entry of the
-//! `ActionGuide` flow that only the two world-pickup get flows call. Chests and gifts keep calling
-//! the ordinary entry, so no ring check can interrupt their get demo or steal their credit. Shops
-//! keep their own entry. Each held ring adds its dungeon's full `SmallKeyNum` and `SmallKeyTotalNum`
-//! once, guarded by a saved applied flag, then names the dungeon. The `IsGet` struct also gets one
-//! member per ring actor, so the game's own pouch add records that saved bool for a generated actor
-//! it has never heard of.
+
+
+
+
+
+
+
+
+
+
 
 use crate::bfevfl::flow::NONE;
 use crate::bfevfl::{Bf, Case, Cont, Entry, Event, Flow, Kind, Val};
@@ -21,8 +21,8 @@ use crate::zs;
 
 const PREFIX: &str = "OOTRRKeyRing";
 const FLOW: &str = "ActionGuide";
-/// A separate entry for world pickups. The get flows used by pots, crates and ground spots call it;
-/// chests and gifts keep calling the untouched `ActionGuide` entry.
+
+
 const WORLD_ENTRY: &str = "OOTRRRingWorld";
 const SHOP_ENTRY: &str = "ActionGuideForShop";
 const GET_ENTRY: &str = "ActionGuide";
@@ -45,8 +45,8 @@ fn push(f: &mut Flow, kind: Kind) -> Res<u16> {
     Ok(i)
 }
 
-/// A bool query answers `0` for true and `1` for false, so the case values name the answer, not the
-/// meaning. Callers pass the event for a true answer first and the event for a false answer second.
+
+
 fn switch(f: &mut Flow, actor: &str, query: &str, params: Cont, on_true: u16, on_false: u16) -> Res<Kind> {
     let (a, q): (u16, u16) = crate::start_state::query_slot(f, actor, query)?;
     Ok(Kind::Switch { actor: a, query: q, cases: vec![Case { val: 0, ev: on_true }, Case { val: 1, ev: on_false }], params: Some(params) })
@@ -62,9 +62,9 @@ fn add_int(name: String, count: u32) -> Cont {
     }
 }
 
-/// One ring's guarded credit, ending on `next`. The applied flag is checked first, then the saved
-/// `IsGet` bool, so a ring that was already credited (or is not the item being picked up) falls
-/// straight through.
+
+
+
 fn ring(f: &mut Flow, r: &'static crate::key_rings::Ring, next: u16) -> Res<u16> {
     let applied: String = crate::key_rings::applied_flag(r.folder);
     let (a, add): (u16, u16) = crate::dungeon_credit::action_slot(f, HOLDER, ADD)?;
@@ -96,9 +96,9 @@ fn ring(f: &mut Flow, r: &'static crate::key_rings::Ring, next: u16) -> Res<u16>
         act: add,
         params: Some(add_int(crate::dungeon_credit::flag(r.folder, "SmallKeyNum"), r.count)),
     })?;
-    // The saved `IsGet.<actor>` bool answers 0 when the ring is held, so credit. The pouch query is
-    // unreliable for generated key items: in game the ring can be in the pouch while the pouch query
-    // still says no, which was exactly the world-drop ring's missing-credit symptom.
+
+
+
     let held: Kind = switch(
         f,
         HOLDER,
@@ -108,7 +108,7 @@ fn ring(f: &mut Flow, r: &'static crate::key_rings::Ring, next: u16) -> Res<u16>
         next,
     )?;
     let held_q: u16 = push(f, held)?;
-    // Already applied: answer 0, so skip. Not applied yet: answer 1, check the saved held flag.
+
     let asked: Kind = switch(
         f,
         HOLDER,
@@ -120,8 +120,8 @@ fn ring(f: &mut Flow, r: &'static crate::key_rings::Ring, next: u16) -> Res<u16>
     push(f, asked)
 }
 
-/// Builds one ring-check chain ending at a one-frame wait. The chain is shared by the world-pickup
-/// entry and the shop entry; the ordinary item-get entry is deliberately left alone.
+
+
 pub fn patch(f: &mut Flow) -> Res<()> {
     patch_with(f, &crate::key_rings::RINGS.iter().collect::<Vec<_>>())
 }
@@ -159,7 +159,7 @@ pub fn patch_bf(b: &mut Bf, rings: &[&'static crate::key_rings::Ring]) -> Res<()
     patch_with(f, rings)
 }
 
-/// Points a world-pickup flow's `ActionGuide` sub call at the ring-checked entry.
+
 fn redirect(f: &mut Flow, file: &str) -> Res<usize> {
     let mut n: usize = 0;
     for e in &mut f.events {
@@ -183,8 +183,8 @@ pub fn redirect_bf(b: &mut Bf, file: &str) -> Res<()> {
     Ok(())
 }
 
-/// Stages the credit on top of the no-tutorials patch. The new entry lives in the `ActionGuide`
-/// flow; only the two world-pickup get flows are redirected to it, leaving chests and gifts alone.
+
+
 pub fn stage_flows(rf: &mut Romfs, late: &mut Vec<Out>, work: &std::path::Path, rings: &[&'static crate::key_rings::Ring]) -> Res<()> {
     if rings.is_empty() {
         return Ok(());
@@ -194,11 +194,6 @@ pub fn stage_flows(rf: &mut Romfs, late: &mut Vec<Out>, work: &std::path::Path, 
         crate::story_skip::stage_late(rf, late, work, file, |b| redirect_bf(b, file))?;
     }
     Ok(())
-}
-
-#[cfg(test)]
-fn flag_pairs() -> Vec<(String, u32)> {
-    flag_pairs_with(&crate::key_rings::RINGS.iter().collect::<Vec<_>>())
 }
 
 fn flag_pairs_with(rings: &[&'static crate::key_rings::Ring]) -> Vec<(String, u32)> {
@@ -226,13 +221,8 @@ fn is_our_row(r: &Node, h: u32) -> bool {
         && r.get("SaveFileIndex") == Some(&Node::I32(0))
 }
 
-/// The native pouch add writes `IsGet.<actor>` through the `IsGet` struct: member `hash(actor)`
-/// points at the saved Bool `hash("IsGet." + actor)`. A generated ring has no vanilla struct member,
-/// so without this the get event can put the ring in the pouch and still leave our held check false.
-#[cfg(test)]
-fn add_isget_members(y: &mut Byml) -> Res<()> {
-    add_isget_members_with(y, &crate::key_rings::RINGS.iter().collect::<Vec<_>>())
-}
+
+
 
 fn add_isget_members_with(y: &mut Byml, rings: &[&'static crate::key_rings::Ring]) -> Res<()> {
     let isget: u32 = crate::flags::hash_name("IsGet");
@@ -263,11 +253,6 @@ fn add_isget_members_with(y: &mut Byml, rings: &[&'static crate::key_rings::Ring
         ]));
     }
     Ok(())
-}
-
-#[cfg(test)]
-fn add_rows(y: &mut Byml) -> Res<()> {
-    add_rows_with(y, &crate::key_rings::RINGS.iter().collect::<Vec<_>>())
 }
 
 fn add_rows_with(y: &mut Byml, rings: &[&'static crate::key_rings::Ring]) -> Res<()> {
@@ -310,8 +295,8 @@ fn edit_raw(raw: &[u8], rings: &[&'static crate::key_rings::Ring]) -> Res<Vec<u8
     add_runtime_rows(raw, rings)
 }
 
-/// Stages the saved Bools the credit checks use and the `IsGet` members that make the game write
-/// them. Later GameDataList editors merge with this file.
+
+
 pub fn stage_rows(rf: &mut Romfs, more: &mut Vec<Out>, rings: &[&'static crate::key_rings::Ring]) -> Res<()> {
     if rings.is_empty() {
         return Ok(());
@@ -335,6 +320,18 @@ mod tests {
     use crate::bfevfl::flow::NONE;
     use crate::bfevfl::{Actor, Entry};
     use std::collections::{BTreeMap as BM, BTreeSet as BS};
+
+    fn flag_pairs() -> Vec<(String, u32)> {
+        flag_pairs_with(&crate::key_rings::RINGS.iter().collect::<Vec<_>>())
+    }
+
+    fn add_isget_members(y: &mut Byml) -> Res<()> {
+        add_isget_members_with(y, &crate::key_rings::RINGS.iter().collect::<Vec<_>>())
+    }
+
+    fn add_rows(y: &mut Byml) -> Res<()> {
+        add_rows_with(y, &crate::key_rings::RINGS.iter().collect::<Vec<_>>())
+    }
 
     const EXPECTED: [(&str, u32); 21] = [
         ("test", 0xba6bd213),
@@ -436,8 +433,8 @@ mod tests {
                         } else if name.starts_with("IsGet.") {
                             held_seen.insert(name.clone());
                         }
-                        // An applied flag is false on a first pickup (answer 1), while the saved
-                        // IsGet bool is true once the ring is held (answer 0).
+
+
                         let answer: u32 = if name.starts_with("OOTRR_KeyRing.") { 1 } else { 0 };
                         at = cases.iter().find(|c| c.val == answer).unwrap().ev as usize;
                     }
@@ -564,8 +561,8 @@ mod tests {
             let e: &Event = &f.events[at];
             match &e.kind {
                 Kind::Switch { cases, params, .. } => {
-                    // The saved IsGet switch credits when true (answer 0); an applied flag skips
-                    // when true (answer 0), so its credit branch is answer 1.
+
+
                     let name: String = match params.as_ref().and_then(|c| c.get("GameDataName")) {
                         Some(Val::Str(n)) => n.clone(),
                         _ => panic!("a ring switch needs a flag"),

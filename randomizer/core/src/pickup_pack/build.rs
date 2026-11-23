@@ -26,9 +26,9 @@ pub fn pool_of(packs: &[Vec<Entry>]) -> Res<Pool> {
     Ok(p)
 }
 
-/// Parts the actor's merged component chain replaces but the pack still needs. A ring's own get
-/// performer hides the event-object parent's plain PouchContent performer; the working key-ring
-/// pack carries both, and the audit has to follow the same closure.
+
+
+
 pub fn extra_roots(p: &Pool, l: &Layers) -> Res<Vec<String>> {
     if l.ring.is_none() || l.drop_ring {
         return Ok(Vec::new());
@@ -51,12 +51,12 @@ pub fn plan_with_files(packs: &[Vec<Entry>], s: &Spec, l: &Layers, extra: &[(Str
     }
     let mut p: Pool = pool_of(packs)?;
     let peers: Vec<(String, usize)> = p.files.iter().map(|e| (e.0.clone(), e.1.len())).collect();
-    // Hand made extras such as a ring's get-event AINB are binary by design. Only the files
-    // inherited from the game's actor packs still have to be parameter files.
+
+
     let made: BS<&str> = extra.iter().map(|(f, _)| f.as_str()).collect();
     let m: Made = make_with(&p, s, l)?;
-    // Event-form rings are key items with no ground check. Drop-form rings are world pickups and
-    // need the same lift as every other pickup that turns in place.
+
+
     let lifted: bool = l.spin && (l.ring.is_none() || l.drop_ring);
     let m: Made = if lifted { crate::pickup_pack::lift::ground(&p, m, &s.name, l.lift)? } else { m };
     let mut fresh: Vec<(String, usize)> = Vec::new();

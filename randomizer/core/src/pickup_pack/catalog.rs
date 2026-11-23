@@ -356,8 +356,8 @@ mod tests {
                 let d: Done = run_with(&root, P::new("unused"), "unused", &s, &o, &l).unwrap_or_else(|x| panic!("{} {a:?}: {x}", e.item));
                 assert!(d.root.is_none(), "{}", e.item);
                 assert_eq!(d.files[0].path, pack_of(&s.name), "{}", e.item);
-                // Rings inherit the plain key-item pouch, so they have no PouchActor row to read.
-                // Their identity is the actor name itself, already declared in the catalog.
+
+
                 let identity: String = if l.ring.is_some() {
                     s.identity_override().unwrap().to_string()
                 } else {

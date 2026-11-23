@@ -1,24 +1,18 @@
-//! Ring pickups need their own get event to save their pouch identity. The working key-ring build
-//! ships one small AINB per ring; this module reuses that shape with our short flag names.
-//!
-//! The AINB deliberately does *not* write dungeon keys or the applied flag. All credit comes from
-//! the pickup flows (world pickups, chests and gifts), which use the same `GameData` actions main
-//! randomizer uses. An earlier version also wrote credit in the AINB; its int writes did not take
-//! effect on `DungeonInfo.*`, but its applied-flag write did, so chest flows saw the ring as already
-//! credited and skipped their working key write.
-
+use crate::ainb::build::Spec;
 use crate::ainb::{audit, Ainb};
 use crate::error::{Error as E, Res};
 
-const FOREST: &[u8] = include_bytes!("../../../data/ring_events/Item_Ring_Forest.event.root.ainb");
-const FIRE: &[u8] = include_bytes!("../../../data/ring_events/Item_Ring_Fire.event.root.ainb");
-const WATER: &[u8] = include_bytes!("../../../data/ring_events/Item_Ring_Water.event.root.ainb");
-const SHADOW: &[u8] = include_bytes!("../../../data/ring_events/Item_Ring_Shadow.event.root.ainb");
-const SPIRIT: &[u8] = include_bytes!("../../../data/ring_events/Item_Ring_Spirit.event.root.ainb");
-const WELL: &[u8] = include_bytes!("../../../data/ring_events/Item_Ring_Well.event.root.ainb");
-const GTG: &[u8] = include_bytes!("../../../data/ring_events/Item_Ring_GTG.event.root.ainb");
-const GANON: &[u8] = include_bytes!("../../../data/ring_events/Item_Ring_Ganon.event.root.ainb");
+pub const DONOR: &str = "AI/PouchContent.event.root.ainb";
+pub const DONOR_PACK: &str = "Pack/AI.Global.Product.111.pack.zs";
 const SET_FLAG: &str = "OneShotSetNonStructGameDataBool";
+
+pub fn donor(rf: &mut crate::romfs::Romfs) -> Res<Vec<u8>> {
+    let raw: Vec<u8> = rf.read_zs(DONOR_PACK)?;
+    let es: Vec<crate::sarc::Entry> = crate::sarc::parse(&raw)?;
+    crate::sarc::get(&es, DONOR)
+        .map(|e: &crate::sarc::Entry| e.data.clone())
+        .ok_or_else(|| E::Msg(format!("ring event: {DONOR} is missing from {DONOR_PACK}")))
+}
 
 fn ring(actor: &str) -> Res<&'static crate::key_rings::Ring> {
     crate::key_rings::all_with_hideout()
@@ -27,66 +21,6 @@ fn ring(actor: &str) -> Res<&'static crate::key_rings::Ring> {
         .ok_or_else(|| E::Msg(format!("ring event: unknown actor {actor}")))
 }
 
-fn template(actor: &str) -> Res<&'static [u8]> {
-    Ok(match actor {
-        "Item_Ring_Forest" => FOREST,
-        "Item_Ring_Fire" => FIRE,
-        "Item_Ring_Water" => WATER,
-        "Item_Ring_Shadow" => SHADOW,
-        "Item_Ring_Spirit" => SPIRIT,
-        "Item_Ring_Well" => WELL,
-        "Item_Ring_GTG" => GTG,
-        "Item_Ring_Ganon" => GANON,
-        "Item_Ring_Hideout" => FOREST,
-        _ => return Err(E::Msg(format!("ring event: unknown actor {actor}"))),
-    })
-}
-
-/// The source event names the long `Item_KeyRing_<Dungeon>` actors. Our saved pouch identity is
-/// the short `Item_Ring_<Dungeon>` actor, so patch both names before shipping the event.
-fn legacy(actor: &str) -> Res<&'static str> {
-    Ok(match actor {
-        "Item_Ring_Forest" => "ForestTemple",
-        "Item_Ring_Fire" => "FireTemple",
-        "Item_Ring_Water" => "WaterTemple",
-        "Item_Ring_Shadow" => "ShadowTemple",
-        "Item_Ring_Spirit" => "SpiritTemple",
-        "Item_Ring_Well" => "Well",
-        "Item_Ring_GTG" => "GTG",
-        "Item_Ring_Ganon" => "Ganon",
-        // The short Hideout name fits the Forest template's longer strings.
-        "Item_Ring_Hideout" => "ForestTemple",
-        _ => return Err(E::Msg(format!("ring event: unknown actor {actor}"))),
-    })
-}
-
-fn replace(raw: &[u8], old: &[u8], new: &[u8]) -> Res<Vec<u8>> {
-    if new.len() > old.len() {
-        return Err(E::Format("ring event: a new name is longer than its template name"));
-    }
-    let mut out: Vec<u8> = raw.to_vec();
-    let mut from: usize = 0;
-    let mut n: usize = 0;
-    while let Some(at) = out[from..].windows(old.len()).position(|w| w == old) {
-        let at: usize = from + at;
-        let end: usize = at + old.len();
-        if out.get(end) != Some(&0) {
-            from = end;
-            continue;
-        }
-        out[at..at + new.len()].copy_from_slice(new);
-        out[at + new.len()..end].fill(0);
-        from = end;
-        n += 1;
-    }
-    if n == 0 {
-        return Err(E::Format("ring event: the template is missing an event name"));
-    }
-    Ok(out)
-}
-
-/// Guard the build against ever reintroducing AINB credit. A dungeon int write here would not take
-/// effect, and an applied-flag write would make the real flow credit skip itself.
 fn no_direct_credit(a: &Ainb, actor: &str) -> Res<()> {
     let r: &crate::key_rings::Ring = ring(actor)?;
     let applied: String = crate::key_rings::applied_flag(r.folder);
@@ -107,16 +41,49 @@ fn no_direct_credit(a: &Ainb, actor: &str) -> Res<()> {
     Ok(())
 }
 
-/// The ring-specific get event, renamed to save `IsGet.<actor>` for our pack identity. All key credit
-/// is done by the pickup flows, so this event must leave `DungeonInfo.*` and the applied flag alone.
-pub fn make(actor: &str) -> Res<Vec<u8>> {
-    let old: &str = legacy(actor)?;
-    let mut raw: Vec<u8> = template(actor)?.to_vec();
-    raw = replace(&raw, format!("IsGet.Item_KeyRing_{old}").as_bytes(), crate::key_rings::got_flag(actor).as_bytes())?;
-    raw = replace(&raw, format!("RandoKey_KeyRing_{old}.event.root").as_bytes(), format!("{actor}.event.root").as_bytes())?;
+fn patch(a: &mut Ainb, flag: &str, event: &str) -> Res<()> {
+    let pf: u32 = a.pool.add(flag);
+    let pe: u32 = a.pool.add(event);
+    let f: Vec<u8> = pf.to_le_bytes().to_vec();
+    let e: Vec<u8> = pe.to_le_bytes().to_vec();
+    let z: Vec<u8> = 0u32.to_le_bytes().to_vec();
+    let seq: usize = a.add_node(&Spec::composite(2, "ring#chain").kid(35, ""))?;
+    let set: usize = a.add_node(
+        &Spec::node("OneShotSetNonStructGameDataBool", "ring#save")
+            .constant(0, "GameDataIndex", z.clone())
+            .constant(1, "Value", e.clone())
+            .constant(3, "GameDataFullName", f.clone()),
+    )?;
+    let blank: u32 = a.pool.add("");
+    a.params[seq].add_plug(2, 1, crate::ainb::Plug { a: set as u32, b: blank, extra: Vec::new() })?;
+    let q: usize = a.add_node(
+        &Spec::query("QueryGetNonStructGameDataBool", "ring#check")
+            .idle(0, "GameDataIndex", z.clone())
+            .idle(1, "IsDirect", e.clone())
+            .constant(3, "GameDataFullName", f.clone()),
+    )?;
+    let mut sel: Spec = Spec::composite(7, "ring#select").linked(1, "Input", q, 0).kid(77, "True").kid(seq, "False");
+    sel.link_extra = 8;
+    let id: usize = a.add_node(&sel)?;
+    let g: usize = a.find_in(id, 1, "Input").ok_or_else(|| E::Format("ring event: the selector lost its input"))?;
+    a.set_in_val(1, g, &e)?;
+    let p: &mut crate::ainb::Param = &mut a.params[58];
+    let [n, b]: [u8; 2] = p.pl[2];
+    let old: &mut crate::ainb::Plug = p
+        .plugs
+        .get_mut(b as usize..b as usize + n as usize)
+        .and_then(|g: &mut [crate::ainb::Plug]| g.iter_mut().find(|q| q.a == 35))
+        .ok_or_else(|| E::Format("ring event: the get flow lost its first child"))?;
+    old.a = id as u32;
+    Ok(())
+}
 
-    let a: Ainb = Ainb::parse(&raw)?;
+pub fn make(actor: &str, donor: &[u8]) -> Res<Vec<u8>> {
+    ring(actor)?;
     let flag: String = crate::key_rings::got_flag(actor);
+    let event: String = format!("{actor}.event.root");
+    let mut a: Ainb = Ainb::parse(donor)?;
+    patch(&mut a, &flag, &event)?;
     let set: Vec<usize> = a
         .find_els(SET_FLAG)
         .into_iter()
@@ -141,12 +108,26 @@ pub fn make(actor: &str) -> Res<Vec<u8>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::romfs::Romfs;
+
+    fn donor() -> Option<Vec<u8>> {
+        let p: std::path::PathBuf = ootrr_game::test_romfs::path();
+        if !p.exists() {
+            eprintln!("skipped: no romfs at {}, set OOTRR_ROMFS", p.display());
+            return None;
+        }
+        let mut rf: Romfs = Romfs::open(&p).unwrap();
+        super::donor(&mut rf).ok()
+    }
 
     #[test]
     fn every_ring_event_sets_its_own_saved_flag() {
+        let Some(raw) = donor() else {
+            return;
+        };
         for r in crate::key_rings::all_with_hideout() {
-            let raw: Vec<u8> = make(r.actor).unwrap();
-            let a: Ainb = Ainb::parse(&raw).unwrap();
+            let out: Vec<u8> = make(r.actor, &raw).unwrap();
+            let a: Ainb = Ainb::parse(&out).unwrap();
             let flag: String = crate::key_rings::got_flag(r.actor);
             let set: Vec<usize> = a
                 .find_els(SET_FLAG)
@@ -159,15 +140,18 @@ mod tests {
                 .filter(|&i| a.in_str(i, "GameDataFullName") == Some(flag.as_str()))
                 .collect();
             assert_eq!((set.len(), get.len()), (1, 1), "{}", r.actor);
-            assert!(!String::from_utf8_lossy(&raw).contains("Item_KeyRing_"), "{}", r.actor);
+            assert!(!String::from_utf8_lossy(&out).contains("Item_KeyRing_"), "{}", r.actor);
         }
     }
 
     #[test]
     fn every_ring_event_leaves_key_credit_to_the_flows() {
+        let Some(raw) = donor() else {
+            return;
+        };
         for r in crate::key_rings::all_with_hideout() {
-            let raw: Vec<u8> = make(r.actor).unwrap();
-            let a: Ainb = Ainb::parse(&raw).unwrap();
+            let out: Vec<u8> = make(r.actor, &raw).unwrap();
+            let a: Ainb = Ainb::parse(&out).unwrap();
             for name in [format!("DungeonInfo.{}.SmallKeyNum", r.folder), format!("DungeonInfo.{}.SmallKeyTotalNum", r.folder)] {
                 for kind in ["OneShotSetNonStructGameDataInt", "OneShotSetStructGameDataInt"] {
                     let set: Vec<usize> = a

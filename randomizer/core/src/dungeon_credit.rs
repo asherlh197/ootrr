@@ -434,11 +434,11 @@ fn give_ring(next: u16, actor: &str) -> Kind {
     Kind::Sub { next, params: Some(c), flow: String::new(), entry: ROOT_ENTRY.to_string() }
 }
 
-/// A chest whose drop is a ring runs this entry instead of the plain chest event. It calls the
-/// ordinary `Success_` entry first, so the ring is held up, announced and added to the pouch, then
-/// credits the dungeon once and plays the key-count line. This matches the gift and world-pickup
-/// paths, where the item get also happens before the count. A bool query answers `0` for true, so
-/// an already applied flag skips and a false flag runs the credit.
+
+
+
+
+
 pub fn ring_credit(f: &mut Flow, r: &'static crate::key_rings::Ring) -> Res<()> {
     let name: String = ring_entry_name(r.folder);
     if f.entries.iter().any(|e| e.name == name) {
@@ -473,7 +473,7 @@ pub fn ring_credit(f: &mut Flow, r: &'static crate::key_rings::Ring) -> Res<()> 
     Ok(())
 }
 
-/// Adds the chest credit entries of every standard key ring, for one chest size.
+
 pub fn credit_rings(f: &mut Flow, folders: &[&'static str]) -> Res<()> {
     for folder in folders {
         let r: &'static crate::key_rings::Ring = crate::key_rings::by_folder_any(folder).ok_or_else(|| Error::Msg(format!("{folder} has no key ring")))?;

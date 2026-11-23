@@ -117,10 +117,10 @@ pub(crate) fn tables(rf: &mut Romfs, o: &Opts, modded: bool, s: &Spec, l: &Layer
             crate::pickup_pack::model::row(&mut r, rows::need(y, m, ACTOR_INFO)?)?;
         }
         if l.ring.is_some() {
-            // A ring keeps the small key's model row but answers to its saved key-item identity,
-            // so the generic world get flow records the `IsGet` bool the credit checks read. The
-            // drop actor's pack name is only its world body; the pouch and get flow know the ring
-            // by this identity.
+
+
+
+
             r.set("ActorName", Node::Str(identity.to_string()));
             if let Some(elink) = l.pouch_from.as_deref() {
                 r.set("ELinkUserName", Node::Str(elink.to_string()));
@@ -404,9 +404,9 @@ pub fn audit(rf: &mut Romfs, s: &Spec, pl: &Plan, files: &[File], rst_z: &[u8], 
         let n: usize = y.root.as_arr().map(|a| a.len()).unwrap_or(0);
         let m: usize = was.root.as_arr().map(|a| a.len()).unwrap_or(0);
         let had: usize = usize::from(rows::find(&was, &s.name).is_some());
-        // A drop-form ring names its world body in the tables but is saved and credited under the
-        // event-form ring actor, so its pouch table gains one row for each when the identity row is
-        // not already there (for example from the event-form pack in the same seed).
+
+
+
         let extra: usize = usize::from(t == POUCH_INFO && pl.identity != s.name && rows::find(&was, &pl.identity).is_none());
         let r: &Node = rows::need(&y, &s.name, t)?;
         if !rows::sorted(&y)? || n + had != m + 1 + extra {
@@ -483,17 +483,17 @@ pub fn run_with(romfs: &P, load: &P, mod_name: &str, s: &Spec, o: &Opts, l: &Lay
     for n in [BASE, DONOR, source]
         .into_iter()
         .chain(l.pouch_from.as_deref())
-        // An event-form ring inherits the event-object actor, so its parent pack must be in the
-        // pool to close the component chain. A drop-form ring inherits the world pickup base,
-        // which is already in the pool.
+
+
+
         .chain(l.ring.as_deref().filter(|_| !l.drop_ring).map(|_| crate::pickup_pack::actor::EVENT_BASE))
     {
         if seen.insert(n) {
             packs.push(sarc::parse(&start(&mut rf, o.base.as_ref(), &pack_of(n))?)?);
         }
     }
-    // The model donor lends only its parameter files, so a donor's AI graph never reaches the
-    // pickup and the template does not refuse a binary file in its pool.
+
+
     if let Some(m) = l.model.as_deref() {
         if seen.insert(m) {
             let es: Vec<Entry> = sarc::parse(&start(&mut rf, o.base.as_ref(), &pack_of(m))?)?;
@@ -505,10 +505,11 @@ pub fn run_with(romfs: &P, load: &P, mod_name: &str, s: &Spec, o: &Opts, l: &Lay
         if !crate::pickup_pack::is_actor_name(who) || s.identity.as_deref() != Some(who) {
             return Err(E::Msg(format!("{who} must be a plain actor name and the pack identity")));
         }
-        // Only chest and gift rings use the ring-specific get AINB. A drop-form ring must use the
-        // pickup base's generic get event so `key_ring_credit` can grant its dungeon's keys.
+
+
         if !l.drop_ring {
-            extra.push((format!("AI/{who}.event.root.ainb"), crate::ring_event::make(who)?));
+            let donor: Vec<u8> = crate::ring_event::donor(&mut rf)?;
+            extra.push((format!("AI/{who}.event.root.ainb"), crate::ring_event::make(who, &donor)?));
         }
     }
     let pl: Plan = plan_with_files(&packs, s, l, &extra)?;
@@ -530,8 +531,8 @@ pub fn run_with(romfs: &P, load: &P, mod_name: &str, s: &Spec, o: &Opts, l: &Lay
     for line in audit(&mut rf, s, &pl, &files, &rst_z, &sc)? {
         let _ = writeln!(note, "{line}");
     }
-    // An event-form ring is a saved key item with no world pickup death table. A drop-form ring
-    // has the pickup body and must pass the same collected-once guard as every other drop.
+
+
     let guard_line: String = if l.ring.is_some() && !l.drop_ring {
         format!("{} is a saved key item, it does not carry a world pickup death table", s.name)
     } else {
@@ -740,7 +741,7 @@ mod tests {
         assert_eq!(comp(&d, "Item_Ring_Forest", "ModelInfoRef").as_deref(), Some("?Component/ModelInfo/Item_Ring_Forest.engine__component__ModelInfo.bgyml"));
         assert_eq!(comp(&d, "Item_Ring_Forest", "PouchContentRef").as_deref(), Some("?Component/PouchContentParam/Item_Ring_Forest.game__component__PouchContentParam.bgyml"));
         assert!(comp(&d, "Item_Ring_Forest", "ELinkRef").unwrap().contains("Component/ELink/"), "{}", comp(&d, "Item_Ring_Forest", "ELinkRef").unwrap());
-        assert!(comp(&d, "Item_Ring_Forest", "XLinkRef").unwrap().contains("Component/XLink/"), "{}", comp(&d, "Item_Ring_Forest", "XLinkRef").unwrap());
+        assert!(comp(&d, "Item_Ring_Forest", "XLinkRef").is_none());
         assert!(comp(&d, "Item_Ring_Forest", "ASInfoRef").is_none());
         assert!(comp(&d, "Item_Ring_Forest", "AttentionSenderRef").is_none());
 
@@ -803,7 +804,6 @@ mod tests {
         for f in [
             format!("Actor/{}.engine__actor__ActorParam.bgyml", s.name),
             format!("Component/ASInfo/{}.engine__component__ASInfo.bgyml", s.name),
-            format!("Component/ELink/{}.engine__component__ELinkParam.bgyml", s.name),
             format!("Component/PouchContentParam/{}.game__component__PouchContentParam.bgyml", s.name),
         ] {
             assert!(names.contains(f.as_str()), "{f} is missing from the drop ring pack");
@@ -812,9 +812,9 @@ mod tests {
         assert_eq!(actor_file_data.root.get("$parent").and_then(Node::as_str), Some("Work/Actor/Obj_Item_Base.engine__actor__ActorParam.gyml"));
         assert!(comp(&d, &s.name, "ActorNameRef").unwrap().contains(r.actor));
         assert!(comp(&d, &s.name, "ASInfoRef").unwrap().contains(&s.name));
-        assert!(comp(&d, &s.name, "ELinkRef").unwrap().contains(&s.name));
-        // No EventPerformerRef override means the pickup base's generic performer runs `Dm_SY_Get`,
-        // where key_ring_credit grants the keys from the saved IsGet bool.
+        assert!(comp(&d, &s.name, "ELinkRef").is_none());
+
+
         assert!(comp(&d, &s.name, "EventPerformerRef").is_none(), "a drop ring must not override the generic get performer");
         assert!(
             !names.contains(format!("Component/EventPerformerParam/{}.engine__component__EventPerformerParam.bgyml", s.name).as_str()),

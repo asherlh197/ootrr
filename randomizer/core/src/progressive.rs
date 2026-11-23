@@ -648,7 +648,7 @@ pub fn stage(rf: &mut Romfs, used: &BS<(String, Size)>, scale: Option<(f32, i32)
     stage_with(rf, used, scale, kids, keys, &[])
 }
 
-/// [`stage`] plus the chest credit entries of the standard key rings.
+
 pub fn stage_with(rf: &mut Romfs, used: &BS<(String, Size)>, scale: Option<(f32, i32)>, kids: &[(String, String)], keys: &[&str], rings: &[&'static str]) -> Res<Vec<Out>> {
     let mut outs: Vec<Out> = Vec::new();
     let mut sizes: BS<Size> = used.iter().map(|u| u.1).collect();

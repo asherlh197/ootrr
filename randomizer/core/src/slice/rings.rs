@@ -5,8 +5,8 @@ use crate::start_items::pool::JUNK;
 use crate::slice::support::Plan;
 use crate::world::{LocId, Placement, World};
 
-/// Replaces every dungeon Small Key with one ring for that dungeon. The ring is put in a free
-/// spot that can hold it; all the old key slots become junk so the fill pool keeps its size.
+
+
 pub fn replace(
     d: &Data,
     w: &World,
@@ -19,8 +19,8 @@ pub fn replace(
     replace_with(d, w, p, base, free, ok, notes, &[])
 }
 
-/// The same, plus rings named by plando that the settings did not select. Those rings are added
-/// over a junk or non-progress slot, leaving their dungeon's shuffled small keys in the pool.
+
+
 pub fn replace_with(
     d: &Data,
     w: &World,
@@ -84,8 +84,8 @@ pub fn replace_with(
     Ok(())
 }
 
-/// The manually toggled Hideout ring replaces the four shuffled Hideout keys with one ring. It is
-/// independent of `p.rings` and never joins `p.active_rings`.
+
+
 pub fn replace_hideout(
     d: &Data,
     w: &World,

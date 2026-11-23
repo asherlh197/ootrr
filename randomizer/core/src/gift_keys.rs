@@ -28,7 +28,7 @@ const PARAM: &str = "ActorName";
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Item {
     Small,
-    /// A standard dungeon's key ring. The ring keeps its pouch add and credits the full key count.
+
     Ring(&'static crate::key_rings::Ring),
     Other(Grant),
 }
@@ -41,7 +41,7 @@ impl Item {
         }
     }
 
-    /// Rings are ordinary `Item` actors at runtime, so they have to be recognised by their name.
+
     pub fn of_item(name: &str, kind: &str) -> Option<Item> {
         crate::key_rings::by_item_any(name).map(Item::Ring).or_else(|| Item::of(kind))
     }
@@ -143,11 +143,11 @@ fn add_count(name: String, count: u32) -> Cont {
     }
 }
 
-/// True when `index` is a pouch add whose next event is one of our full ring credits.
-///
-/// A ring keeps its pouch add, so the story-skip gift shortening has to recognise the credit after
-/// it and leave the add's `next` alone. Without this it retargets the add to the scene's end and the
-/// keys are never written.
+
+
+
+
+
 pub fn is_ring_credit(f: &Flow, index: usize) -> bool {
     let Some(next) = (match f.events.get(index).map(|e| &e.kind) {
         Some(Kind::Action { next, .. } | Kind::Sub { next, .. }) => Some(*next),
@@ -213,7 +213,7 @@ pub fn edit_flow(f: &mut Flow, index: usize, event: &str, item: Item, d: &'stati
         let Kind::Action { next, .. } = f.events[index].kind else { unreachable!() };
         let first: u16 = credit(f, item, d, next)?;
         if matches!(item, Item::Ring(_)) {
-            // A ring is a pouch item: keep the add, then credit its dungeon once.
+
             if let Kind::Action { next, .. } = &mut f.events[index].kind {
                 *next = first;
             }
@@ -230,7 +230,7 @@ pub fn edit_flow(f: &mut Flow, index: usize, event: &str, item: Item, d: &'stati
     };
     let first: u16 = credit(f, item, d, next)?;
     if matches!(item, Item::Ring(_)) {
-        // Rings must run the full give (get window and pouch add) before the credit.
+
         if let Kind::Sub { next, .. } = &mut f.events[index].kind {
             *next = first;
         }
@@ -434,8 +434,8 @@ mod tests {
         assert!(shown);
     }
 
-    /// Saria's shortened gift must still run the credit after its pouch add. The gift shortener
-    /// retargets ordinary grants to the end of the scene, which used to orphan the ring's writes.
+
+
     #[test]
     fn a_ring_gift_survives_the_shortened_gift_scene() {
         for ring in crate::key_rings::all_with_hideout() {

@@ -1,8 +1,8 @@
-//! One key ring per standard small-key dungeon, plus one separately toggled Hideout ring.
-//!
-//! A ring is a generated pickup that grants every small key of one dungeon at once. Standard rings
-//! are only used when small keys are shuffled. The Hideout ring is a manual choice outside the
-//! standard Count/Selection/Random settings; the Treasure Chest Game ring stays unmapped.
+
+
+
+
+
 
 use crate::rng::Rng;
 
@@ -19,22 +19,22 @@ pub const HIDEOUT_NUM: u16 = 208;
 
 pub const NOTE: &str = "Each standard dungeon's small keys become one key ring. A ring gives every key of its dungeon when it is picked up.";
 
-/// Generated actor names stay short: the remake crashes on long generated item actor names.
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Ring {
     pub item: &'static str,
     pub key: &'static str,
     pub dungeon: &'static str,
-    /// Lowercase settings-string choice id.
+
     pub choice: &'static str,
-    /// Per-ring logic setting, true only for the rings active in this seed.
+
     pub select: &'static str,
     pub folder: &'static str,
-    /// Event-form actor, used in chests and gifts.
+
     pub actor: &'static str,
-    /// Drop-form catalog item, used at pots, ground spots and other world pickups.
+
     pub drop_item: &'static str,
-    /// Drop-form actor: the small key model on a falling, touchable pickup body.
+
     pub drop_actor: &'static str,
     pub count: u32,
 }
@@ -102,9 +102,9 @@ pub const RINGS: [Ring; 8] = [
     Ring { item: "Small Key Ring (Ganons Castle)", key: "Small Key (Ganons Castle)", dungeon: "Ganons Castle", choice: "ganons_castle", select: "key_ring_ganons_castle", folder: "InsideGanonCastle", actor: "Item_Ring_Ganon", drop_item: "Item_RingDrop_Ganon", drop_actor: "Obj_RingDrop_Ganon", count: 2 },
 ];
 
-/// The Hideout ring is deliberately outside `RINGS`: it is enabled by its own manual toggle, never
-/// by Key Rings Count, Selection or Random. It still uses the same generated pickup and credit
-/// machinery as the standard rings.
+
+
+
 pub const HIDEOUT_RING: Ring = Ring {
     item: "Small Key Ring (Thieves Hideout)",
     key: "Small Key (Thieves Hideout)",
@@ -122,8 +122,8 @@ pub fn all() -> Vec<&'static Ring> {
     RINGS.iter().collect()
 }
 
-/// Every ring this build knows, standard and manual Hideout. Shared pickup/credit code uses this;
-/// the ring-selection settings never do.
+
+
 pub fn all_with_hideout() -> Vec<&'static Ring> {
     let mut out: Vec<&'static Ring> = all();
     out.push(&HIDEOUT_RING);
@@ -162,8 +162,8 @@ pub fn by_drop_actor(actor: &str) -> Option<&'static Ring> {
     RINGS.iter().find(|r| r.drop_actor == actor)
 }
 
-/// Lookup for code shared with the manually enabled Hideout ring. The plain helpers above stay
-/// standard-only so Count, Selection and Random can never see Hideout.
+
+
 pub fn by_item_any(item: &str) -> Option<&'static Ring> {
     by_item(item).or_else(|| (item == HIDEOUT_RING.item).then_some(&HIDEOUT_RING))
 }
@@ -188,7 +188,7 @@ pub fn is_any_ring(item: &str) -> bool {
     by_item_any(item).is_some()
 }
 
-/// Manual dungeon selection, returned in the stable catalog order.
+
 pub fn selected(ids: &[String]) -> Vec<&'static Ring> {
     RINGS.iter().filter(|r| ids.iter().any(|id| id == r.choice)).collect()
 }
@@ -199,7 +199,7 @@ fn order(seed: &str, tag: &str) -> Vec<usize> {
     out
 }
 
-/// A user-chosen number of seed-randomized standard dungeons.
+
 pub fn count(seed: &str, n: usize) -> Vec<&'static Ring> {
     order(seed, &format!("count {n}"))
         .into_iter()
@@ -208,14 +208,14 @@ pub fn count(seed: &str, n: usize) -> Vec<&'static Ring> {
         .collect()
 }
 
-/// A seed-randomized 1..=8 count and a seed-randomized subset of that size.
+
 pub fn random(seed: &str) -> (usize, Vec<&'static Ring>) {
     let mut rng: Rng = Rng::from_text(&format!("{seed} key rings random count"));
     let n: usize = 1 + rng.below(RINGS.len() as u64) as usize;
     (n, order(seed, &format!("random {n}")).into_iter().take(n).map(|i| &RINGS[i]).collect())
 }
 
-/// A short spoiler note for non-default modes. Hideout is deliberately not named here.
+
 pub fn mode_note(mode: Mode, count: usize, active: &[&'static Ring]) -> String {
     let names: Vec<&str> = active.iter().map(|r| r.dungeon).collect();
     match mode {
@@ -230,13 +230,13 @@ pub fn is_ring(item: &str) -> bool {
     by_item(item).is_some()
 }
 
-/// The event-form ring is a plain key-item actor, so its pack carries its saved pouch identity.
+
 pub fn pack(actor: &str) -> String {
     actor.to_string()
 }
 
-/// The drop-form ring needs a different pack name: its actor is a world pickup, while its get event
-/// and pouch identity stay the event-form ring actor.
+
+
 pub fn drop_pack(actor: &str) -> String {
     by_actor(actor).map(|r| r.drop_actor.to_string()).unwrap_or_else(|| actor.to_string())
 }

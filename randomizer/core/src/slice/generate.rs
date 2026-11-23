@@ -107,22 +107,10 @@ pub fn allowed(d: &Data, w: &World, p: &Plan, it: ItemId, l: LocId) -> bool {
     if !buildable(d, w, p, it, l) {
         return false;
     }
+    if let Some(ok) = crate::slice::place_rules::verdict(&spot) {
+        return ok;
+    }
     let here: Option<&str> = w.regions[w.locs[l].region].dungeon.as_deref();
-    // Native guard drops are shuffled checks when Hideout keys move: only a normal floor pickup
-    // can be written into their spare actor (crate::gerudo_drops, crate::hideout_keys).
-    if crate::hideout_keys::is_native(name) {
-        return crate::gerudo_drops::eligible(d, &i.name);
-    }
-    if p.hideout != Keep::Vanilla && i.kind == "HideoutSmallKey" {
-        let dungeon: bool = here.is_some();
-        let place: bool = match p.hideout {
-            Keep::AnyDungeon => dungeon,
-            _ => true,
-        };
-        let chest: bool = d.flow.by_name(name).is_none() && !d.special(name) && crate::slice::dungeon_items::chest_ok(d, name) && d.cat.by_name(name).is_some_and(|c| c.kind == "chest");
-        let gift: bool = crate::gift_keys::spot(d, name);
-        return place && i.dungeon.is_some() && (chest || gift);
-    }
     if scoped(p, &i.kind) {
         return i.dungeon.is_some() && i.dungeon.as_deref() == here;
     }
@@ -266,17 +254,17 @@ pub fn generate_data(d: &Data, s: &Settings, seed: &str, o: &GenOpts) -> Res<Gen
     let watch: Watch = Watch::new(o.limit, o.live.clone());
     let mut p: Plan = plan_with_seed(s, Some(seed))?;
     p.notes.extend(p.trials.note());
-    // A plando entry can name a ring the settings did not select. Add its logic flag for this seed
-    // only, so the item exists for the plando resolver without changing the saved settings string or
-    // turning its dungeon's shuffled small keys into junk.
+
+
+
     let mut logic: Vec<(&'static str, &'static str)> = p.logic();
-    let mut extra_rings: Vec<&'static crate::key_rings::Ring> = Vec::new();
+    let mut xs: Vec<&'static crate::key_rings::Ring> = Vec::new();
     if p.rings {
         for e in &o.plando {
             if let Some(r) = crate::key_rings::by_item(&e.item) {
                 logic.push((r.select, "true"));
-                if !p.active_rings.contains(&r) && !extra_rings.contains(&r) {
-                    extra_rings.push(r);
+                if !p.active_rings.contains(&r) && !xs.contains(&r) {
+                    xs.push(r);
                 }
             }
         }
@@ -316,13 +304,13 @@ pub fn generate_data(d: &Data, s: &Settings, seed: &str, o: &GenOpts) -> Res<Gen
     let pooled: Placement = restore_upgrades(&w, d, &vanilla, &pk.free, &|it: ItemId, l: LocId| allowed(d, &w, &p, it, l));
     let (mut base, gone): (Placement, Vec<String>) = crate::start_items::pool::base(d, &w, &p, &pooled, &pk.free)?;
     p.notes.extend(gone);
-    let mut ring_notes: Vec<String> = Vec::new();
+    let mut ns: Vec<String> = Vec::new();
     {
         let ok = |it: ItemId, l: LocId| allowed(d, &w, &p, it, l);
-        crate::slice::rings::replace_with(d, &w, &p, &mut base, &pk.free, &ok, &mut ring_notes, &extra_rings)?;
-        crate::slice::rings::replace_hideout(d, &w, &p, &mut base, &pk.free, &ok, &mut ring_notes)?;
+        crate::slice::rings::replace_with(d, &w, &p, &mut base, &pk.free, &ok, &mut ns, &xs)?;
+        crate::slice::rings::replace_hideout(d, &w, &p, &mut base, &pk.free, &ok, &mut ns)?;
     }
-    p.notes.extend(ring_notes);
+    p.notes.extend(ns);
     let ex: Vec<String> = check_excluded(&w, &p, &pk.free, &base)?;
     p.notes.extend(ex);
     let seen: Vec<Cell<u8>> = vec![Cell::new(0); w.items.len() * w.locs.len()];
@@ -345,7 +333,7 @@ pub fn generate_data(d: &Data, s: &Settings, seed: &str, o: &GenOpts) -> Res<Gen
             && !d.item(&w.items.names[i]).is_some_and(|x| crate::slice::dungeon_items::exempt(&p, &x.kind))
             && !(lay.is_some() && crate::shops::is_loc(&w.locs[*l].name))
             && !(p.silver && crate::slice::silver::is_spot(&w.locs[*l].name))
-            // Native guard drops are now shuffled checks; their vanilla key moves into the pool.
+
             && !crate::hideout_keys::is_native(&w.locs[*l].name)
             // The Light Arrows Cutscene holds Ganon's Boss Key in this mode; its Light Arrows join the pool.
             && !(p.keys.ganon == Keep::Lacs && w.locs[*l].name == crate::lacs_key::LOC)
@@ -618,16 +606,16 @@ mod tests {
             } else {
                 key_rings::random(seed).1
             };
-            let gen_plan: Plan = plan_with_seed(&s, Some(seed)).unwrap();
-            assert_eq!(gen_plan.active_rings, expected, "{mode}");
+            let a: Plan = plan_with_seed(&s, Some(seed)).unwrap();
+            assert_eq!(a.active_rings, expected, "{mode}");
 
             let o: GenOpts = GenOpts { tries: 40, ..GenOpts::default() };
             let g: Generated = generate_data(&d, &s, seed, &o).unwrap_or_else(|e| panic!("{mode}: {e}"));
-            let loaded = g.seed_file.settings().unwrap();
-            let build_plan: Plan = plan_with_seed(&loaded.settings, Some(&g.seed_file.seed)).unwrap();
-            assert_eq!(build_plan.ring_mode, gen_plan.ring_mode, "{mode}");
-            assert_eq!(build_plan.ring_count, gen_plan.ring_count, "{mode}");
-            assert_eq!(build_plan.active_rings, expected, "{mode}");
+            let loaded: crate::settings::Loaded = g.seed_file.settings().unwrap();
+            let b: Plan = plan_with_seed(&loaded.settings, Some(&g.seed_file.seed)).unwrap();
+            assert_eq!(b.ring_mode, a.ring_mode, "{mode}");
+            assert_eq!(b.ring_count, a.ring_count, "{mode}");
+            assert_eq!(b.active_rings, expected, "{mode}");
             assert_eq!(loaded.settings.text(key_rings::MODE_SETTING).unwrap(), mode);
             assert!(g.report.contains("seed-randomized standard dungeons"), "{mode}: {}", g.report);
 

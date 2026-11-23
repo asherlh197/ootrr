@@ -80,7 +80,7 @@ pub fn need(d: &Data, seed: &SeedFile, fixed: &BM<String, String>) -> Res<BM<Str
         };
         let p: Pick = match resolve_at(d, loc, item, fixed.get(loc).map(|s| s.as_str())) {
             Ok(p) => p,
-            // A boss heart whose item has no pack keeps the chest it always had (crate::boss_heart).
+
             Err(_) if d.cat.by_name(loc).is_some_and(|l| l.kind == "bossheart") => continue,
             Err(e) => return Err(E::Msg(format!("{loc} holds {item}, which this build cannot place there yet: {e}"))),
         };
@@ -88,14 +88,14 @@ pub fn need(d: &Data, seed: &SeedFile, fixed: &BM<String, String>) -> Res<BM<Str
         let w: &mut Want = out.entry(name.clone()).or_insert_with(|| Want { name, pick: p, kind: k, spots: Vec::new() });
         w.spots.push(loc.clone());
     }
-    // An Ocarina at an NPC gift that holds the item up is handed out as its pickup actor, which
-    // either tier's branch can show, so both packs are built (crate::ocarina_hold).
+
+
     for (loc, p) in crate::ocarina_hold::wanted(d, seed) {
         let w: &mut Want = out.entry(p.pack.clone()).or_insert_with(|| Want { name: p.pack.clone(), pick: p, kind: Kind::Free, spots: Vec::new() });
         w.spots.push(loc);
     }
-    // A ring is a generated actor, so even when it sits in a chest or is handed to Link its pack
-    // has to be written. World spots take the drop form; chests and gifts take the event form.
+
+
     for (loc, item) in &seed.placements {
         if crate::key_rings::by_item_any(item).is_none() {
             continue;
@@ -119,7 +119,7 @@ fn opts(host: Host, base: Option<PB>, dry: bool) -> Opts {
 
 fn run_one(romfs: &P, load: &P, mod_name: &str, w: &Want, o: &Opts) -> Res<Done> {
     let (s, mut l): (Spec, Layers) = w.spec()?;
-    // Every pickup the seed places turns in place, off the floor.
+
     l.spin = true;
     if w.kind.kit() {
         return kit::run_with(romfs, load, mod_name, &s, o, &[], &l);
@@ -267,7 +267,7 @@ mod tests {
         let s: SeedFile = seed(&[(free, "Boomerang"), (pot.as_str(), "Megaton Hammer"), (skull, "Progressive Hookshot"), ("KF Midos Top Left Chest", "Bow")]);
         let fixed: BM<String, String> = [(skull.to_string(), "Item_Hookshot".to_string())].into_iter().collect();
         let w: BM<String, Want> = need(&d, &s, &fixed).unwrap();
-        // Every seed also builds the song and Ocarina pickups the story skips hold up (crate::ocarina_hold).
+
         let scene: Vec<String> = crate::ocarina_hold::wanted(&d, &s).into_iter().map(|(_, p)| p.pack).collect();
         let names: Vec<&str> = w.keys().map(|k| k.as_str()).filter(|k| !scene.iter().any(|x| x == k)).collect();
         assert_eq!(names, vec!["Obj_Boomerang", "Obj_Hammer", "Obj_Hookshot_GH"]);
@@ -283,8 +283,8 @@ mod tests {
         assert!(need(&d, &s, &BM::new()).is_err());
         let plain: SeedFile = seed(&[(free, "Rupees (5)"), (pot.as_str(), "Rupees (20)"), ("KF Midos Top Left Chest", "Bow")]);
         assert!(need(&d, &plain, &BM::new()).unwrap().keys().all(|k| scene.iter().any(|x| x == k)));
-        // A kit cannot carry the Bow's ammo layer, so a skulltula drops the plain Bow kit (the
-        // starter bag hook adds the quiver after its get); a Bow on the ground keeps the ammo layer.
+
+
         let bow: SeedFile = seed(&[(skull, "Bow"), (free, "Bow")]);
         let wbow: BM<String, Want> = need(&d, &bow, &[(skull.to_string(), "Item_Range_Bow".to_string()), (free.to_string(), "Item_Range_Bow".to_string())].into_iter().collect()).unwrap();
         assert_eq!(wbow["Obj_Range_Bow_GH"].kind, Kind::Skull);
@@ -674,11 +674,11 @@ mod tests {
             return;
         };
         let d: Data = Data::load().unwrap();
-        // The story skips always hand out the lessons' songs and the Ocarinas with the item get, as
-        // their pickups (crate::ocarina_hold), so every seed builds those packs; a seed with no
-        // other new item at a pickup spot builds only them.
+
+
+
         let scene = |g: &Generated| -> std::collections::BTreeSet<String> { crate::ocarina_hold::wanted(&d, &g.seed_file).into_iter().map(|(_, p)| p.pack).collect() };
-        // With chests and rewards off only the hearts are shuffled, and they keep their own spots.
+
         let mut s: Settings = Settings::default();
         s.set("shuffle_rewards", crate::settings::Value::s("off")).unwrap();
         s.set("shuffle_chests", crate::settings::Value::s("off")).unwrap();

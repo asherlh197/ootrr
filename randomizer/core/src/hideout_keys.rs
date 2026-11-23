@@ -1,14 +1,14 @@
-//! The four Thieves' Hideout key pickups are not scanned chests: they are actors in the adult
-//! fortress BANC and actors in the carpenter rescue flow. When their keys move into the dungeon
-//! chest pool those actors have to hand out something else. Each native drop's always-present spare
-//! becomes one of the shuffled non-key items the pickup-spot filter can leave on the ground, with its
-//! generated pickup pack actor swapped in. This is only enabled for `gerudo_fortress=open`, where
-//! every guard is already defeated, so both copies sit on the floor as ordinary static pickups.
-//! The flow-bound copy stays a harmless green rupee with its original hash so the rescue event can
-//! still find it and clear the shutters. The always-present spare carries the shuffled pickup pack
-//! but keeps its original hash, SRT hash and placement ID, so the game still ties the pickup to the
-//! native key flag that controls the shutters. Permanent rows for those original hashes are inserted
-//! in sorted order into the `Bool64bitKey` table so the game can find them and remember the pickup.
+
+
+
+
+
+
+
+
+
+
+
 
 use std::collections::BTreeMap as BM;
 
@@ -38,9 +38,9 @@ pub const NATIVE: [&str; 4] = [
 const FLOW_NAME: &str = "SageOfSpirit_RescueCarpenter";
 const WARP: &str = "EventWarpToActorIncludedRayCheck";
 
-/// The four always-present spare key actors keep their original placement hashes. The game uses
-/// those hashes for both the pickup flag and the shutter state, so the permanent rows must be for
-/// these exact values.
+
+
+
 fn orig_hash(i: usize) -> u64 {
     [
         14727159573379044362u64,
@@ -61,7 +61,7 @@ fn old_actor(d: &Data, loc: &str) -> Res<String> {
         .ok_or_else(|| E::Msg(format!("{loc} is not in the location catalog")))
 }
 
-/// Patch the BANC in place, keeping every other edit the chest pass made to the same file.
+
 pub fn edit_banc(
     file: &str,
     raw: &[u8],
@@ -128,8 +128,8 @@ pub fn edit_banc(
             .iter()
             .find(|(h, _, _)| *h == flow_hash)
             .ok_or_else(|| E::Msg(format!("{loc} flow actor is not a catalog ref")))?;
-        // The rescue flow still looks this actor up as a harmless green rupee. Keeping its hash,
-        // name, Presence and placement ID unchanged is what keeps the shutter flags working.
+
+
         if list[flow_i].get("Gyaml").and_then(|v| v.as_str()) != Some(old.as_str()) {
             return Err(E::Msg(format!("{loc} flow actor does not hold {old} in {file}")));
         }
@@ -138,8 +138,8 @@ pub fn edit_banc(
         if list[spare_i].get("Gyaml").and_then(|v| v.as_str()) != Some(old.as_str()) {
             return Err(E::Msg(format!("{loc} spare actor does not hold {old} in {file}")));
         }
-        // Keep the spare actor's Hash, SRTHash and placement ID exactly as shipped. Only the model
-        // changes: the game uses that identity for both the pickup flag and the shutter state.
+
+
         list[spare_i].set("Gyaml", Node::Str(new.clone()));
     }
     let out: Vec<u8> = y.write()?;
@@ -169,9 +169,9 @@ fn add_rows(y: &mut Byml, hashes: &[u64]) -> Res<usize> {
         if rows.iter().any(|r| hash_of(r) == Some(*h)) {
             continue;
         }
-        // The table is sorted by hash and searched with a binary search. The original key hashes
-        // sit in the middle of the table, so insert each row at its sorted position instead of
-        // appending it where the game would never find it.
+
+
+
         let at: usize = rows.partition_point(|r| hash_of(r).is_some_and(|x| x < *h));
         rows.insert(
             at,
@@ -186,9 +186,9 @@ fn add_rows(y: &mut Byml, hashes: &[u64]) -> Res<usize> {
     Ok(n)
 }
 
-/// The native key placement hashes have no saved rows, so the rewritten pickups reappear on every
-/// reload. Add permanent rows for those original hashes in their sorted positions in the
-/// `Bool64bitKey` table.
+
+
+
 pub fn stage_rows(rf: &mut Romfs, more: &mut Vec<Out>, active: bool) -> Res<()> {
     if !active {
         return Ok(());
@@ -235,10 +235,10 @@ fn patch_flow(raw: &[u8], d: &Data, actors: &BM<String, String>) -> Res<Vec<u8>>
         .find(|f| f.name == FLOW_NAME)
         .ok_or_else(|| E::Msg(format!("the carpenter rescue flow has no {FLOW_NAME}")))?;
 
-    // Keep both original actions on this actor. Participation still runs the rescue subflow and
-    // its shutter-clear flag, and the warp still reaches Event362 and Event377. Only the model
-    // changes to a harmless green rupee; the static spare in the BANC is the single copy of the
-    // shuffled pickup.
+
+
+
+
     let drop: usize = f
         .actors
         .iter()
@@ -272,8 +272,8 @@ fn patch_flow(raw: &[u8], d: &Data, actors: &BM<String, String>) -> Res<Vec<u8>>
     Ok(out)
 }
 
-/// Add the flow patch to the files the flow-location pass has already staged, so it cannot be
-/// overwritten by a later write of the same file.
+
+
 pub fn stage_flow(
     rf: &mut Romfs,
     files: &mut Vec<StagedFile>,

@@ -319,27 +319,6 @@ const GERUDO_KEYS: View = View {
     opts: &[yes("Vanilla", "vanilla"), yes("Any Dungeon", "any_dungeon"), broken("Overworld", "overworld"), yes("Anywhere", "keysanity")],
 };
 
-const KEY_RING_MODE: View = View {
-    id: "key_rings_mode",
-    label: "Key Ring Dungeons",
-    tip: "Which standard dungeons get key rings. Hideout keys are separate and are never included here.\n\nAll - Every standard key dungeon gets a ring.\n\nCount - A seed-randomized set of the chosen number of dungeons gets rings.\n\nSelection - Tick each standard dungeon individually.\n\nRandom - A seed-randomized number from 1 to 8 and a seed-randomized set of that many dungeons.",
-    kind: Kind::Pick,
-    opts: &[
-        yes("All", "all"),
-        yes("Count", "count"),
-        yes("Selection", "selection"),
-        yes("Random", "random"),
-    ],
-};
-
-const KEY_RING_COUNT: View = View {
-    id: "key_rings_count",
-    label: "Key Ring Count",
-    tip: "How many standard dungeons get key rings in Count mode. The dungeons are chosen from the seed, not by list order.",
-    kind: Kind::Number(1, 8, true),
-    opts: &[],
-};
-
 pub struct PortSection {
     pub label: &'static str,
     pub entries: &'static [Entry],
@@ -484,22 +463,12 @@ const DUNGEONS_TAB: &[PortSection] = &[
                     Entry::View(&BOSS_KEYS),
                     Entry::View(&DUNGEON_REWARDS),
                     Entry::View(&GERUDO_KEYS),
-                    Entry::Plain(crate::key_rings::HIDEOUT_SETTING),
                     gray_pick(
                         "Shuffle Boss Souls",
                         &["Off", "On"],
                         0,
                         "Shuffles 8 boss souls (one for each blue warp dungeon). A boss will not appear until you collect its respective soul.",
                     ),
-                ],
-            ),
-            port(
-                "Key Rings",
-                &[
-                    Entry::Plain(crate::key_rings::SETTING),
-                    Entry::View(&KEY_RING_MODE),
-                    Entry::View(&KEY_RING_COUNT),
-                    Entry::Plain(crate::key_rings::SELECTION_SETTING),
                 ],
             ),
         ];
@@ -800,6 +769,15 @@ pub const MENU: &[Page] = &[
             sec("Boss fights", &["boss_minibosses", "boss_minions"]),
             sec("Minigames", &["unbreakable_bowling_grass", "harder_talon_cuccos"]),
         ],
+    },
+    Page {
+        id: "key_rings",
+        label: "Key Rings",
+        heading: IN_DEV,
+        sections: &[sec(
+            "Key Rings",
+            &[crate::key_rings::SETTING, crate::key_rings::MODE_SETTING, crate::key_rings::COUNT_SETTING, crate::key_rings::SELECTION_SETTING, crate::key_rings::HIDEOUT_SETTING],
+        )],
     },
     Page {
         id: "qol_bundle",

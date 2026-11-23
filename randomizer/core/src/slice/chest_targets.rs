@@ -92,8 +92,8 @@ pub(crate) fn actors_for(d: &Data, seed: &SeedFile) -> Res<BM<String, String>> {
         if crate::pot_slice::targets::is_loc(d, loc) || crate::shops::seed::skip(loc) || crate::slice::silver::is_spot(loc) {
             continue;
         }
-        // Native guard drops no longer hold their key actor, so they contribute an item destination
-        // but no vanilla actor to the chest pool.
+
+
         if !crate::hideout_keys::is_native(loc) {
             let vanilla: &str = d.pool_item(loc).ok_or_else(|| E::Msg(format!("{loc} has no vanilla item")))?;
             let actor: String = match d.flow.by_name(loc).and_then(|l| l.item.clone()) {
@@ -113,16 +113,16 @@ pub(crate) fn actors_for(d: &Data, seed: &SeedFile) -> Res<BM<String, String>> {
         let mut acts: Vec<String> = pool.get(item).cloned().unwrap_or_default();
         let net: isize = crate::pot_slice::targets::delta(d, seed, item) + crate::shops::seed::delta(seed, item) + crate::slice::silver::delta(seed, item);
         adjust(d, item, net, &mut acts);
-        // Hideout keys have no vanilla chest actor: the four native guards contribute none. Pad the
-        // chest destinations with the canonical small-key actor so each moved key can be written.
+
+
         if p.hideout != Keep::Vanilla && d.item(item).is_some_and(|i| i.kind == "HideoutSmallKey") {
             let canon: String = d.item(item).and_then(|i| i.actor.clone()).ok_or_else(|| E::Msg(format!("{item} has no key actor")))?;
             while acts.len() < locs.len() {
                 acts.push(canon.clone());
             }
         }
-        // A ring has no vanilla chest actor: its generated pickup pack supplies one for every
-        // chest or gift that holds it.
+
+
         if let Some(r) = crate::key_rings::by_item_any(item) {
             let made: String = crate::key_rings::pack(r.actor);
             while acts.len() < locs.len() {
@@ -273,8 +273,8 @@ pub(crate) fn targets_with(d: &Data, seed: &SeedFile, roam: bool, fixed: &BM<Str
             new.actor.clone().ok_or_else(|| E::Msg(format!("{item} has no key actor")))?
         } else {
             match family {
-                // The chest raises its drop actor, so it holds the tier the player most likely gets
-                // there (tier_order::chest_views); the chain grants the right tier either way.
+
+
                 Some(f) => view_drop(f, views.get(loc.as_str()).map(|s| s.as_str()))?.to_string(),
                 None => fixed.get(loc).or_else(|| given.get(loc)).cloned().ok_or_else(|| E::Msg(format!("{loc} was given no item actor")))?,
             }

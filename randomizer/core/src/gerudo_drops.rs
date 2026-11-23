@@ -1,6 +1,6 @@
-//! The four native Thieves' Hideout key drops become ordinary shuffled checks when Hideout keys
-//! are shuffled. They keep their own logic locations, so the fill chooses one item per drop from
-//! the same pool that can sit on the ground, and the seed records what each guard drops.
+
+
+
 
 use std::collections::BTreeMap as BM;
 
@@ -11,19 +11,19 @@ use crate::slice::key_spots::{self, Spot};
 use crate::slice::support::{Keep, Plan};
 use crate::world::{LocId, World};
 
-/// Whether the guard drops hold shuffled items instead of their vanilla Hideout keys.
+
 pub fn active(p: &Plan) -> bool {
     p.hideout != Keep::Vanilla
 }
 
-/// An item that can be picked up off the floor through a generated pickup pack. Literal dungeon
-/// keys and shipped world pickups are refused by `key_spots`, which is the same filter pots use.
+
+
 pub fn eligible(d: &Data, item: &str) -> bool {
     key_spots::placeable(d, item, Spot::Free)
 }
 
-/// Add the four carpenter-drop checks to the shuffled pool. The native locations stay in the logic
-/// world in every mode; only Hideout-key shuffle turns them into checks.
+
+
 pub fn add_checks(w: &World, p: &Plan, free: &mut Vec<LocId>, left: &mut BM<String, usize>) {
     if !active(p) {
         return;
@@ -38,7 +38,7 @@ pub fn add_checks(w: &World, p: &Plan, free: &mut Vec<LocId>, left: &mut BM<Stri
     }
 }
 
-/// The pickup-pack actor each native drop must spawn, keyed by its logic location name.
+
 pub fn actors(d: &Data, seed: &SeedFile, fixed: &BM<String, String>) -> Res<BM<String, String>> {
     let mut out: BM<String, String> = BM::new();
     for name in crate::hideout_keys::NATIVE {

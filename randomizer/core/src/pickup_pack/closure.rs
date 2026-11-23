@@ -141,10 +141,10 @@ pub fn chain(p: &Pool, actor: &str) -> Res<Chain> {
     Ok(Chain { files, comps })
 }
 
-/// A ring's generated actor replaces its parent's event performer, so `select` would drop the
-/// parent's `PouchContent` parameter file. The working key-ring pack carries both: the game keeps
-/// the parent performer around even when the child names its own. Extra roots let a caller keep
-/// those replaced parts without changing the closure of every other actor.
+
+
+
+
 pub fn select_with(p: &Pool, actor: &str, extra: &[String]) -> Res<Vec<String>> {
     let c: Chain = chain(p, actor)?;
     let mut seen: BS<String> = c.files.iter().cloned().collect();

@@ -1,8 +1,8 @@
-//! Key rings are key items, so their get window reads four labels from
-//! `ActorMsg/PouchContent.msbt`: `<actor>_Name`, `_Caption`, `_GetMessage` and `_GetCaption`. The
-//! event opens a blank dialog and Link stays in the item-get pose when any of them is missing, so
-//! every language archive gets all four texts for every ring. The same English line is written in
-//! all 16 archives: it is short, names the dungeon, and keeps the box from stalling.
+
+
+
+
+
 
 use std::path::Path as P;
 
@@ -29,7 +29,7 @@ fn label(r: &Ring, suffix: &str) -> String {
     format!("{}{suffix}", r.actor)
 }
 
-/// Adds the get texts for every ring to one language archive.
+
 pub fn apply(raw: &[u8]) -> Res<Vec<u8>> {
     apply_with(raw, &crate::key_rings::all_with_hideout())
 }
@@ -55,8 +55,8 @@ pub fn apply_with(raw: &[u8], rings: &[&Ring]) -> Res<Vec<u8>> {
     sarc::write(&es)
 }
 
-/// Stages the text edit onto the already staged language archive, so hints, dungeon item text and
-/// the other text stages are kept.
+
+
 pub fn stage(rf: &mut Romfs, work: &P, more: &mut Vec<Out>, rings: &[&Ring]) -> Res<()> {
     if rings.is_empty() {
         return Ok(());

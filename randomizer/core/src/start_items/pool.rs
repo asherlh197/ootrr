@@ -150,8 +150,8 @@ pub fn base(d: &Data, w: &World, p: &Plan, vanilla: &Placement, free: &[LocId]) 
     for t in p.kit.take.iter().filter(|t| t.strip != Strip::Keep && t.count > 0) {
         strip_one(&c, t, &mut out, &mut notes)?;
     }
-    // The four native guard drops are shuffled checks (gerudo_drops::add_checks), so their vanilla
-    // Hideout keys are already in the pool. Never add more keys than exist.
+
+
     Ok((out, notes))
 }
 

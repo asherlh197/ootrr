@@ -237,8 +237,8 @@ pub const FIRE_SPARE_KEY: &str = "Fire Temple Highest Goron Chest";
 pub const OWN_KEYS: [(&str, &str); 3] = [OWN_STRICT[0], OWN_STRICT[1], FIRE_LOOP];
 
 impl Plan {
-    /// Standard rings selected for this seed, plus the manually toggled Hideout ring. Shared build
-    /// code uses this; the settings-driven ring selection paths use `active_rings` only.
+
+
     pub fn all_rings(&self) -> Vec<&'static crate::key_rings::Ring> {
         let mut out: Vec<&'static crate::key_rings::Ring> = if self.rings {
             if self.active_rings.is_empty() {
@@ -397,8 +397,8 @@ pub fn plan(s: &Settings) -> Res<Plan> {
     plan_with_seed(s, None)
 }
 
-/// Build a plan with the seed available. Count and Random need it to derive the active standard
-/// ring subset; every other caller can keep using `plan`.
+
+
 pub fn plan_with_seed(s: &Settings, seed: Option<&str>) -> Res<Plan> {
     let mut bad: Vec<String> = Vec::new();
     let mut noted: Vec<String> = Vec::new();

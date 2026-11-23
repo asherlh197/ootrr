@@ -181,7 +181,7 @@ pub fn build_with(seed: &SeedFile, romfs: &P, load: &P, mod_name: &str, host: Ho
         }
     }
     let mut keys: Vec<&'static str> = if roam { KEY_DUNGEONS.to_vec() } else { Vec::new() };
-    // A Hideout ring credits GerudoFortress through the ring folders, not this ordinary key path.
+
     if hideout && !hideout_ring && !keys.contains(&"GerudoFortress") {
         keys.push("GerudoFortress");
     }
@@ -569,8 +569,8 @@ pub fn build_with(seed: &SeedFile, romfs: &P, load: &P, mod_name: &str, host: Ho
     crate::dungeon_packs::stage(&mut rf, &mut late, &work, &crate::dungeon_packs::picked_up(&d, seed))?;
     // Rooms that could lock Link in once their item is shuffled away (crate::dungeon_fixes).
     crate::dungeon_fixes::stage(&mut rf, &mut late, &work)?;
-    // World pickups call a separate, ring-checked ActionGuide entry after the pouch add, so the
-    // saved IsGet bool is current without putting ring checks in the chest and gift item-get path.
+
+
     if p.rings || hideout_ring {
         crate::key_ring_credit::stage_flows(&mut rf, &mut late, &work, &p.all_rings())?;
     }

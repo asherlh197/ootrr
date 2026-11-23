@@ -93,7 +93,7 @@ impl Spec {
         self.items.push(ItemDef { name: name.to_string(), adv, count });
     }
 
-    /// A ring is placed as one item but the search treats it as `count` copies of `key`.
+
     pub fn add_ring(&mut self, name: &str, key: &str, count: u32) {
         self.add_item(name, true, 0);
         self.rings.push((name.to_string(), key.to_string(), count));

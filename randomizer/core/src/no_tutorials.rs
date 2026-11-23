@@ -24,8 +24,8 @@ use crate::staging::{self, Out};
 pub const FILE: &str = "Event/EventFlow/ActionGuide.bfevfl.zs";
 pub const FLOW: &str = "ActionGuide";
 pub const PREFIX: &str = "OOTRRNoGuide";
-/// With key rings on, the two entries the game calls on item gets and in shops start here. Key ring
-/// credit hangs its checks off these events, and each chain still ends at the no-guide wait.
+
+
 pub const RING_PREFIX: &str = "OOTRRRingCall";
 pub const ENTRIES: [&str; 5] = ["OpenActionGuideSceen", "OpenActionGuideSceenForce", "ActionGuide", "ActionGuideForShop", "OpenActionGuideSceenForOcarina"];
 const NONE: u16 = 0xFFFF;
@@ -59,9 +59,9 @@ pub fn start_flags() -> Vec<(String, bool)> {
         .collect()
 }
 
-/// Points every entry at one new wait event that ends the flow. With `rings`, the item-get and
-/// shop entries start at their own wait events instead, so the ring credit can run before the wait
-/// while the tutorials stay off. Returns the entries changed.
+
+
+
 pub fn patch(b: &mut Bf, rings: bool) -> Res<usize> {
     let f: &mut Flow = b.flows.iter_mut().find(|f| f.name == FLOW).ok_or(Error::Format("no tutorials: no ActionGuide flow"))?;
     if f.events.iter().any(|e| e.name.starts_with(PREFIX) || e.name.starts_with(RING_PREFIX)) {

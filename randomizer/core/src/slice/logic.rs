@@ -73,12 +73,12 @@ pub fn spec(d: &Data, over: &[(&str, &str)]) -> Res<Spec> {
     let hearts: bool = HEART_GOALS.iter().any(|k| s.settings.get(k) == Some(&Val::Str("hearts".to_string())));
     let rings: bool = s.settings.flag(crate::key_rings::SETTING);
     let hideout_ring: bool = s.settings.flag(crate::key_rings::HIDEOUT_SETTING);
-    let chosen_rings: Vec<&'static crate::key_rings::Ring> = if rings {
+    let rs: Vec<&'static crate::key_rings::Ring> = if rings {
         let picked: Vec<&'static crate::key_rings::Ring> = crate::key_rings::RINGS
             .iter()
             .filter(|r| s.settings.flag(r.select))
             .collect();
-        // Callers that only pass the old master flag still get the original all-8 behavior.
+
         if picked.is_empty() { crate::key_rings::RINGS.iter().collect() } else { picked }
     } else {
         Vec::new()
@@ -90,7 +90,7 @@ pub fn spec(d: &Data, over: &[(&str, &str)]) -> Res<Spec> {
         let heart: bool = crate::slice::generate::HEARTS.iter().any(|h| it.name.starts_with(h));
         s.add_item(&it.name, it.adv && (hearts || !heart), 0);
     }
-    for r in chosen_rings {
+    for r in rs {
         s.add_ring(r.item, r.key, r.count);
     }
     if hideout_ring {

@@ -166,9 +166,9 @@ pub fn parse_items(t: &str) -> Res<Vec<Item>> {
                 .unwrap_or_default(),
         });
     }
-    // items.json already reserves the ring names as unmapped logic placeholders. Give every ring,
-    // including the manually toggled Hideout ring, a generated pickup actor at runtime without
-    // changing the data file audit.
+
+
+
     for r in crate::key_rings::all_with_hideout() {
         let Some(item) = out.iter_mut().find(|i| i.name == r.item) else {
             continue;

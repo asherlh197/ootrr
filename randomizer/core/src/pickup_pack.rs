@@ -32,9 +32,9 @@ pub struct Spec {
     pub name: String,
     pub style: Style,
     pub heap: Option<i32>,
-    /// Template actor for rows, models and pack files. Defaults to `item`.
+
     pub source: Option<String>,
-    /// Saved pouch actor. Defaults to whatever the source pouch chain names.
+
     pub identity: Option<String>,
 }
 
@@ -54,16 +54,16 @@ pub struct Layers {
     pub ammo: bool,
     pub magic: bool,
     pub model: Option<String>,
-    /// The pouch parameter template is taken from this actor instead of the model source. Key rings
-    /// keep the small key model but need a plain key-item pouch, not the stockable small key one.
+
+
     pub pouch_from: Option<String>,
-    /// The saved pouch identity of a generated key ring. Its get event saves `IsGet.<this>`.
+
     pub ring: Option<String>,
-    /// A ring on a world pickup body instead of the event-form key-item actor. Pots and other
-    /// breakable holders need this: the event actor has no physics and hangs where it was spawned.
+
+
     pub drop_ring: bool,
-    /// The pickup turns in place, glints like a Gold Skulltula token and rests clear of the
-    /// ground (actor::SPIN, actor::GLINT_USER, crate::pickup_pack::lift). The seed build turns it on for every pack it writes.
+
+
     pub spin: bool,
     /// With spin: how far, in millimetres, the pickup's body reaches below its origin so that the
     /// turning item model clears the ground (crate::pickup_pack::lift). The pack builds fill it in.

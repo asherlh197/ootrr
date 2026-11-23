@@ -151,8 +151,8 @@ fn family(i: &Item) -> Option<&'static str> {
 }
 
 fn content_of(i: &Item) -> String {
-    // Rings have a generated pack actor in `Item.actor`; their catalog/pouch identity stays the
-    // `Item_Ring_*` actor the get flows name after the pouch add.
+
+
     crate::key_rings::by_item_any(&i.name).map(|r| r.actor.to_string()).unwrap_or_else(|| i.actor.clone().unwrap_or_default())
 }
 
@@ -233,8 +233,8 @@ pub fn resolve_kit(d: &Data, item: &str, tier: Option<&str>) -> Res<Pick> {
     kit_pick(&p.content).ok_or_else(|| E::Msg(format!("{item} has no pickup pack a kit can carry ({})", p.content)))
 }
 
-/// A ring at a chest or an NPC gift is handed out by the event form. Everywhere else it must be a
-/// world pickup: the event-form key item has no physics and stays where the pot broke.
+
+
 pub fn world_spot(d: &Data, loc: &str) -> bool {
     d.pots.has(loc)
         || crate::slice::skulls::is_skull(d, loc)
@@ -246,8 +246,8 @@ pub fn resolve_drop(d: &Data, item: &str, tier: Option<&str>) -> Res<Pick> {
     let Some(r) = crate::key_rings::by_item_any(item) else {
         return resolve_kit(d, item, tier);
     };
-    // A ring has no upgrade tiers. A world spot may still carry a tier chosen for its usual
-    // occupancy; the drop form ignores it rather than refusing an otherwise valid placement.
+
+
     let _ = tier;
     pick(&r.drop_item).ok_or_else(|| E::Msg(format!("{item} has no drop-form pickup pack this build can place")))
 }

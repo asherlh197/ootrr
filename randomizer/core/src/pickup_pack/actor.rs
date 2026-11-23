@@ -13,8 +13,8 @@ pub const AS_REF: &str = "ASRef";
 pub const AS_INFO_REF: &str = "ASInfoRef";
 pub const POUCH_REF: &str = "PouchContentRef";
 pub const EVENT_REF: &str = "EventPerformerRef";
-/// Key items such as medallions and the working key rings inherit this event-object actor, not the
-/// world pickup base. It gives the ring a pouch identity without any physics or pickup components.
+
+
 pub const EVENT_BASE: &str = "Item_EventObject_Base";
 pub const ATTENTION_REF: &str = "AttentionSenderRef";
 pub const POUCH_ACTOR: &str = "PouchActor";
@@ -51,13 +51,13 @@ pub fn pouch_file(name: &str) -> String {
     format!("Component/PouchContentParam/{name}.game__component__PouchContentParam.bgyml")
 }
 
-/// The ring's own model-info file keeps the small key's model but carries the ring's actor name.
+
 pub fn model_file(name: &str) -> String {
     format!("Component/ModelInfo/{name}.engine__component__ModelInfo.bgyml")
 }
 
-/// A generated get-event performer for a key ring. The AINB itself is added by the writer; this
-/// parameter file is what makes the actor run it instead of the global PouchContent event.
+
+
 pub fn event_file(name: &str) -> String {
     format!("Component/EventPerformerParam/{name}.engine__component__EventPerformerParam.bgyml")
 }
@@ -152,11 +152,11 @@ pub fn make(p: &Pool, s: &Spec) -> Res<Made> {
     make_with(p, s, &Layers::default())
 }
 
-/// A chest or gift ring is a key item, not a world pickup: it inherits `Item_EventObject_Base`,
-/// keeps the small key's model and uses the medallion's plain key-item pouch, ELink and dummy
-/// animation. The only generated parts are its actor, its model-info copy, its pouch actor binding
-/// and its get event performer. That is the same shape as the working alt-rando ring pack; the
-/// world pickup's spin, glint, physics and capture layers must not be mixed into it.
+
+
+
+
+
 fn make_event_ring(p: &Pool, s: &Spec, l: &Layers) -> Res<Made> {
     let source: &str = s.source();
     let item: Chain = chain(p, source)?;
@@ -171,9 +171,9 @@ fn make_event_ring(p: &Pool, s: &Spec, l: &Layers) -> Res<Made> {
     let event: String = event_file(&s.name);
     let pouch: String = pouch_file(&s.name);
     let pouch_base: String = held(p, pouch_source, POUCH_REF, need(&pouch_chain, pouch_source, POUCH_REF)?)?;
-    // The working key ring keeps the plain key-item pouch settings. Copy that file under the ring's
-    // name instead of inventing a PouchActor binding: the save identity comes from the actor name
-    // and the actor tables, not from a pickup-specific pouch parameter.
+
+
+
     let pouch_data: Vec<u8> = p.get(&pouch_base).ok_or_else(|| E::Msg(format!("{pouch_source} pouch {pouch_base} is missing")))?.to_vec();
     let elink: String = held(p, pouch_source, ELINK_REF, need(&pouch_chain, pouch_source, ELINK_REF)?)?;
 
@@ -208,9 +208,9 @@ pub fn make_with(p: &Pool, s: &Spec, l: &Layers) -> Res<Made> {
     if l.ring.is_some() && !l.drop_ring {
         return make_event_ring(p, s, l);
     }
-    // A drop-form ring keeps the same key model, pouch identity and get event, but is built on the
-    // world pickup body so a pot, crate, flying pot or ground spot gives a falling, touchable item
-    // instead of a static event object. This mirrors alt-rando's Obj_RandoDrop_<item> packs.
+
+
+
     let source: &str = s.source();
     let item: Chain = chain(p, source)?;
     let donor: Chain = chain(p, DONOR)?;
@@ -239,17 +239,17 @@ pub fn make_with(p: &Pool, s: &Spec, l: &Layers) -> Res<Made> {
     let name_ref: String = match l.ring.as_deref() {
         Some(who) => own_name_ref(who),
         None if l.own || s.name.starts_with(crate::slice::key_spots::DUNGEON_PREFIX) => {
-            // The game names an actor by its ActorNameRef's file name (the file itself is optional):
-            // a dungeon item's own pickup is named by its own <name>_Name text (debug_names::name_keys).
+
+
             own_name_ref(&s.name)
         }
         None => need(&item, source, NAME_REF)?.to_string(),
     };
     comps.set(NAME_REF, Node::Str(name_ref));
-    // A drop-form ring deliberately keeps the pickup base's `PouchContent_PickUpItem` performer.
-    // That performer runs the ordinary `Dm_SY_Get` flow, where the world-pickup credit patch grants
-    // the dungeon's keys. A ring-specific AINB would be a self-contained get event that bypasses
-    // that flow, which is why the first falling-ring build picked the item up but granted no keys.
+
+
+
+
     match &l.model {
         Some(m) => {
             let (r, f, b): (String, String, Vec<u8>) = model::anim(&s.name, version)?;

@@ -269,9 +269,9 @@ fn card_transition(f: &Flow, i: usize) -> bool {
     matches!(params.as_ref().and_then(|p| p.get("EventName")), Some(Val::Str(s)) if s == CARD_SCENE)
 }
 
-/// Every jail-cell unlock reaches the clear event, and in an open or fast fortress the carpenters
-/// are already free. Guard the card scene itself: the first unlock still runs it and receives the
-/// shuffled item, then the game's own played flag sends later unlocks straight past it.
+
+
+
 pub fn card_once(b: &mut Bf) -> Res<usize> {
     let f: &mut Flow = guard::flow_mut(b, CLEAR.0)?;
     if f.events.iter().any(|e| e.name.starts_with(CARD_ONCE_PREFIX)) {
