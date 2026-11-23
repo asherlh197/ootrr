@@ -298,6 +298,12 @@ mod tests {
     use super::*;
     use crate::settings::Value;
 
+    fn always() -> Opts {
+        Opts { any_fish: true, fast_session: true, one_race: true, first_dig: true, ..Opts::default() }
+    }
+
+    const ALWAYS_NOTES: usize = 4;
+
     /// The defaults with Return with Navi off, the one option on by default.
     fn quiet() -> Settings {
         let mut s: Settings = Settings::default();
@@ -310,13 +316,13 @@ mod tests {
         let mut bad: Vec<String> = Vec::new();
         let o: Opts = read(&Settings::default(), &mut bad);
         assert!(bad.is_empty());
-        assert_eq!(o, Opts { navi: navi_return::Mode::Everywhere, ..Opts::default() });
+        assert_eq!(o, Opts { navi: navi_return::Mode::Everywhere, ..always() });
         assert!(o.any());
         assert!(o.logic().is_empty());
-        assert_eq!(o.notes().len(), 1);
+        assert_eq!(o.notes().len(), 1 + ALWAYS_NOTES);
         let q: Opts = read(&quiet(), &mut bad);
-        assert_eq!(q, Opts::default());
-        assert!(!q.any() && q.notes().is_empty());
+        assert_eq!(q, always());
+        assert!(!q.any() && q.notes().len() == ALWAYS_NOTES);
     }
 
     #[test]
@@ -328,13 +334,13 @@ mod tests {
         let mut bad: Vec<String> = Vec::new();
         let o: Opts = read(&s, &mut bad);
         assert!(bad.is_empty());
-        assert_eq!(o, Opts { skip: Skip::Story, anju: true, poe: true, navi: navi_return::Mode::Off, bunny: bunny::Mode::Off, big_chests: false, blocks: false, owls: false, ..Opts::default() });
+        assert_eq!(o, Opts { skip: Skip::Story, anju: true, poe: true, navi: navi_return::Mode::Off, bunny: bunny::Mode::Off, big_chests: false, blocks: false, owls: false, ..always() });
         s.set(BUNNY, Value::s("jump")).unwrap();
         assert_eq!(read(&s, &mut bad).bunny, bunny::Mode::Jump);
-        assert_eq!(read(&s, &mut bad).notes().len(), 4);
+        assert_eq!(read(&s, &mut bad).notes().len(), 4 + ALWAYS_NOTES);
         s.set(BUNNY, Value::s("off")).unwrap();
         assert_eq!(o.logic(), vec![("chicken_count", "1"), ("big_poe_count", "1")]);
-        assert_eq!(o.notes().len(), 3);
+        assert_eq!(o.notes().len(), 3 + ALWAYS_NOTES);
         s.set(SKIP, Value::s("all")).unwrap();
         assert_eq!(read(&s, &mut bad).skip, Skip::All);
     }
@@ -348,7 +354,8 @@ mod tests {
         let o: Opts = read(&s, &mut bad);
         assert!(bad.is_empty());
         assert!(o.big_chests && o.any());
-        assert_eq!(o.notes(), vec![chest_anim::NOTE.to_string()]);
+        assert_eq!(o.notes()[0], chest_anim::NOTE);
+        assert_eq!(o.notes().len(), 1 + ALWAYS_NOTES);
     }
 
     fn dump() -> Option<std::path::PathBuf> {

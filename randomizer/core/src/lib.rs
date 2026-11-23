@@ -64,6 +64,7 @@ pub mod open_world;
 pub mod ganon_trials;
 pub mod pickup_pack;
 pub mod pickup_persist;
+pub mod pickup_tiers;
 pub mod pot_slice;
 pub mod pots;
 pub mod pregrant;

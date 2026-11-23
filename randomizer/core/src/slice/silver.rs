@@ -835,7 +835,8 @@ mod tests {
             let new: Byml = Byml::parse(&rf.zs.decompress(&std::fs::read(&p).unwrap()).unwrap()).unwrap();
             let olds: &[Node] = old.root.get("Actors").unwrap().as_arr().unwrap();
             let news: &[Node] = new.root.get("Actors").unwrap().as_arr().unwrap();
-            assert_eq!(olds.len(), news.len(), "{f}");
+            let added: usize = if f == crate::qol::dampe_race::GRAVE { 2 } else { 0 };
+            assert_eq!(olds.len() + added, news.len(), "{f}");
             for (a, b) in olds.iter().zip(news) {
                 let h: u64 = hash_of(a).unwrap_or(0);
                 if text(a, "Gyaml") == TOKEN {

@@ -9,7 +9,6 @@ pub fn at(d: &Data, name: &str, item: &str) -> Option<bool> {
     if d.pots.has(name) {
         let known: bool = pickup::of(item).is_some() || crate::slice::key_spots::placeable(d, item, crate::slice::key_spots::Spot::Pot);
         let kind: bool = d.pots.kind_of(name).is_some();
-        // A spot that exists once per age shares one hash at build (crate::slice::copies::share).
         return Some(known && kind);
     }
     None
@@ -75,7 +74,6 @@ mod tests {
         assert_eq!(probe(&d, &w, "Heart Container", "Dodongos Cavern Right Side Pot 1"), Some(true));
         assert_eq!(probe(&d, &w, "Recovery Heart", pot), Some(true));
         assert_eq!(probe(&d, &w, "Progressive Strength Upgrade", pot), Some(true));
-        // A pot that exists once per age shares one hash at build (crate::slice::copies::share).
         assert_eq!(probe(&d, &w, "Piece of Heart", pot), Some(true));
         assert_eq!(probe(&d, &w, "Ocarina", pot), Some(true));
         assert_eq!(probe(&d, &w, "Small Key (Forest Temple)", pot), Some(true));

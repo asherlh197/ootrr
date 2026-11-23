@@ -244,8 +244,6 @@ mod tests {
         let mut s: crate::settings::Settings = crate::settings::Settings::default();
         crate::slice::pick::shuffle_both(&mut s);
         let spot: &str = crate::slice::flow_rules::OCARINA_OF_TIME;
-        // A seed whose Hookshots stand at spots that name no fixed tier, so the swap below keeps
-        // the upgrade order.
         let mut g = (0..20)
             .map(|n| crate::slice::generate::generate_data(&d, &s, &format!("ocarina of time spot {n}"), &crate::slice::GenOpts::default()).unwrap())
             .find(|g| g.seed_file.placements.iter().all(|(l, i)| i != "Progressive Hookshot" || !crate::slice::tier_order::fixed_spot(&d, l)))

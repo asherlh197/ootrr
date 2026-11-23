@@ -1791,6 +1791,37 @@ pub fn stage_sun_give(rf: &mut Romfs, late: &mut Vec<Out>, work: &std::path::Pat
     stage_late(rf, late, work, crate::flow_extra::sun::FLOW, |b| patch_sun_give(b, g))
 }
 
+pub fn patch_goron_pot_give(b: &mut Bf, g: &SceneGive) -> Res<()> {
+    use crate::bfevfl::Case;
+    use crate::flow_extra::goron_pot as pot;
+    let f: &mut Flow = flow_mut(b, pot::FLOW)?;
+    guard(f, "OOTRRPot")?;
+    let scenes: Vec<usize> = (0..f.events.len()).filter(|&i| action(f, i).as_deref() == Some("EventSystemActor.EventTransition") && text(&f.events[i], "EventName") == Some(pot::SCENE)).collect();
+    let [scene] = scenes.as_slice() else {
+        return Err(Error::Msg(format!("goron pot: expected one {} scene in {}, found {}", pot::SCENE, pot::FLOW, scenes.len())));
+    };
+    let scene: usize = *scene;
+    let dropped: u16 = next_of(&f.events[scene].kind).filter(|n| *n != NONE).ok_or(Error::Format("goron pot: the Heart Piece scene ends the flow"))?;
+    if action(f, dropped as usize).as_deref() != Some("GameDataActor.EventTriggerSetGameDataBool") || text(&f.events[dropped as usize], "GameDataName") != Some(pot::DROPPED) {
+        return Err(Error::Format("goron pot: the Heart Piece scene is no longer followed by its drop flag"));
+    }
+    let taken: Kind = set_bool(f, pot::TAKEN, true)?;
+    let after: u16 = chain(f, "OOTRRPotTaken", vec![taken], dropped)?;
+    let give: u16 = item_get(f, "OOTRRPotGive", g, after, &[pot::ENTRY])?;
+    let (a, q): (u16, u16) = crate::start_state::query_slot(f, DATA_ACTOR, "EventQueryIsGameDataBool")?;
+    f.events[scene].kind = Kind::Switch {
+        actor: a,
+        query: q,
+        cases: vec![Case { val: 0, ev: NONE }, Case { val: 1, ev: give }],
+        params: Some(Cont { items: vec![item("GameDataName", Val::Str(pot::DROPPED.to_string())), item("Index", Val::Int(-1))] }),
+    };
+    Ok(())
+}
+
+pub fn stage_goron_pot_give(rf: &mut Romfs, late: &mut Vec<Out>, work: &std::path::Path, g: &SceneGive) -> Res<()> {
+    stage_late(rf, late, work, crate::flow_extra::goron_pot::FLOW, |b| patch_goron_pot_give(b, g))
+}
+
 pub fn patch_rauru_give(b: &mut Bf, g: &SceneGive) -> Res<()> {
     let f: &mut Flow = flow_mut(b, DOOR_FLOW)?;
     let adds: Vec<usize> = (0..f.events.len())
@@ -2297,6 +2328,41 @@ mod tests {
                 assert!(t.calls.contains(&(flow.as_str(), entry.as_str())), "{}: the scene calls {flow}:{entry}, which no longer runs", t.loc);
             }
         }
+    }
+
+    #[test]
+    fn the_goron_pot_win_gives_the_placed_item_once_instead_of_the_heart_piece_scene() {
+        use crate::bfevfl::Case;
+        use crate::flow_extra::goron_pot as pot;
+        let Some(root) = dump() else { return };
+        let mut rf: Romfs = Romfs::open(&root).unwrap();
+        let mut b: Bf = Bf::parse(&rf.read_zs(&format!("Event/EventFlow/{}.bfevfl.zs", pot::FLOW)).unwrap()).unwrap();
+        let g: SceneGive = SceneGive { actor: "Item_Bow".to_string(), family: None, key: None, line: None };
+        patch_goron_pot_give(&mut b, &g).unwrap();
+        let b: Bf = Bf::parse(&b.write().unwrap()).unwrap();
+        let f: &Flow = b.flows.iter().find(|x| x.name == pot::FLOW).unwrap();
+        assert!(!f.events.iter().any(|e| text(e, "EventName") == Some(pot::SCENE)));
+        let switch: &Event = f.events.iter().find(|e| matches!(e.kind, Kind::Switch { .. }) && text(e, "GameDataName") == Some(pot::DROPPED)).unwrap();
+        let Kind::Switch { cases, .. } = &switch.kind else { unreachable!() };
+        assert!(cases.contains(&Case { val: 0, ev: NONE }));
+        let give: u16 = cases.iter().find(|c| c.val == 1).unwrap().ev;
+        let Kind::Sub { next, params, flow, .. } = &f.events[give as usize].kind else { panic!("{:?}", f.events[give as usize]) };
+        assert_eq!(flow, ITEM_GET.0);
+        assert_eq!(params.as_ref().and_then(|c| c.get("ActorName")), Some(&Val::Str("Item_Bow".to_string())));
+        let mut at: u16 = *next;
+        let mut set: Vec<&str> = Vec::new();
+        while at != NONE {
+            let e: &Event = &f.events[at as usize];
+            if let Some(n) = text(e, "GameDataName") {
+                set.push(n);
+            }
+            at = next_of(&e.kind).unwrap_or(NONE);
+        }
+        assert!(set.ends_with(&[pot::TAKEN, pot::DROPPED]), "{set:?}");
+        let entry = f.entries.iter().find(|e| e.name == pot::ENTRY).unwrap();
+        assert!(entry.subs.contains(&give));
+        let mut again: Bf = b.clone();
+        assert!(patch_goron_pot_give(&mut again, &g).is_err());
     }
 
     #[test]

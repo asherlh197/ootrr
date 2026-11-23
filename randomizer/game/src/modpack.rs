@@ -232,7 +232,7 @@ mod tests {
         assert!(same.root.ends_with("Navi Mod"));
         let long: Pack = Pack::create_for(&load, "0400486024dec000", "zz-ootrr-seed", Host::Longshot).unwrap();
         assert!(long.root.join("romfs").is_dir());
-        assert_eq!(long.root, load.join("zz-ootrr-seed"));
+        assert_eq!(long.root, load.join("0400486024DEC000").join("zz-ootrr-seed"));
         for h in [Host::Eden, Host::Hookshot, Host::Longshot, Host::Nx2navi] {
             assert_eq!(Host::parse(h.id()), Some(h));
         }

@@ -128,8 +128,8 @@ mod tests {
         assert_eq!(deal(&d, "Progressive Wallet", Some("Item_Wallet_Medium"), 25).unwrap(), What::Deal { item: "Item_Wallet_Medium".into(), price: 25, model: None });
         assert_eq!(deal(&d, "Progressive Strength Upgrade", Some("Item_Gauntlet_Silver"), 25).unwrap(), What::Deal { item: "Item_Gauntlet_Silver".into(), price: 25, model: None });
         assert!(deal(&d, "Progressive Strength Upgrade", None, 25).is_err());
-        assert_eq!(parse(&d, "GC Shop Item 6=Small Key (Forest Temple)@50").unwrap().what, What::Deal { item: "Obj_SmallKey_ForestTemple".into(), price: 50, model: None });
-        assert!(parse(&d, "GC Shop Item 6=Small Key (Treasure Chest Game)@50").is_err());
+        assert_eq!(parse(&d, "GC Shop Left Side Bottom Right=Small Key (Forest Temple)@50").unwrap().what, What::Deal { item: "Obj_SmallKey_ForestTemple".into(), price: 50, model: None });
+        assert!(parse(&d, "GC Shop Left Side Bottom Right=Small Key (Treasure Chest Game)@50").is_err());
         assert!(parse(&d, "Nowhere=Boomerang@5").is_err());
         assert_eq!(parse(&d, "KF Shop Right Side Bottom Left=Boomerang@0").unwrap().what, What::Deal { item: "Item_Boomerang".into(), price: 0, model: None });
         assert!(parse(&d, "KF Shop Right Side Bottom Left=Boomerang@1000").is_err());

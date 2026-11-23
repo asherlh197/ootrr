@@ -547,6 +547,11 @@ pub fn build() -> Schema {
             .when("shuffle_rewards", "supported"),
     );
     s.push(
+        Setting::toggle(crate::flow_extra::GERUDO_CARD_NUM, crate::flow_extra::GERUDO_CARD, "shuffle", "Gerudo Membership Card", true)
+            .tip("Whether the Gerudo Membership Card, which the guard gives for freeing the four carpenters, is shuffled. When on, the card can be anywhere and the guard gives a random item; when off, she gives the card. Gerudo Fortress \"Rescue one\" always keeps the card vanilla.")
+            .when("shuffle_rewards", "supported"),
+    );
+    s.push(
         Setting::toggle(54, "shuffle_scrubs_a", "shuffle", "One time scrub sales", false)
             .tip("Also shuffle the Business Scrubs that already sell one item once: the Death Mountain Crater heart scrub and the Lost Woods stick and nut bag scrubs. The price stays and the sale text still names the old item.")
             .when("shuffle_rewards", "supported"),

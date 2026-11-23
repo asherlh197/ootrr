@@ -156,7 +156,9 @@ mod tests {
         let list: Byml = Byml::parse(&rf.zs.decompress(&fs::read(out.join(crate::chest_slot::LIST)).unwrap()).unwrap()).unwrap();
         let saved: HM<u64, (i64, i64)> = crate::pickup_persist::rows_of(&list).unwrap();
         let before: HM<u64, (i64, i64)> = rows(&mut rf).unwrap();
-        assert_eq!(saved.len(), before.len() + 2);
+        let jar: bool = seed.placements.get(crate::slice::pickups::JAR_SPOT).is_some_and(|i| d.vanilla_of(crate::slice::pickups::JAR_SPOT) != Some(i.as_str()));
+        assert_eq!(saved.len(), before.len() + 3 + usize::from(jar));
+        assert!(crate::pickup_persist::kept(&saved, crate::qol::dampe_race::HEART));
         let order: Vec<u64> = list.root.get("Data").unwrap().get(crate::pots::TABLE).unwrap().as_arr().unwrap().iter().filter_map(crate::placement::hash_of).collect();
         assert!(order.windows(2).all(|w| w[0] < w[1]));
         for (at, _, actor) in spots {
@@ -213,8 +215,6 @@ mod tests {
         for t in two.iter_mut() {
             t.new_item = "Piece of Heart".to_string();
         }
-        // A spot that exists once per age takes any item: the build gives its copies one hash
-        // (crate::slice::copies::share).
         check(&mut rf, &d, &two, &good).unwrap();
         let mut moved: Vec<Target> = ts.clone();
         moved[0].hash = 1;

@@ -272,7 +272,7 @@ mod tests {
     #[test]
     fn broken_tables_are_refused() {
         assert!(parse("{\"format\":2}").is_err());
-        let short: String = SHOPS_JSON.replacen("\"deal_order\": [5, 4, 0, 1, 3, 6, 7, 2]", "\"deal_order\": [6, 0]", 1);
+        let short: String = SHOPS_JSON.replacen("\"deal_order\": [4, 5, 6, 7, 0, 1, 2, 3]", "\"deal_order\": [6, 0]", 1);
         assert!(parse(&short).is_err());
     }
 }

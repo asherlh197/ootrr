@@ -638,7 +638,7 @@ mod tests {
         assert_eq!(p.keys.map, Keep::Dungeon);
         assert!(p.intro);
         assert!(p.story && p.endings);
-        assert_eq!(p.notes.len(), 19);
+        assert_eq!(p.notes.len(), 23);
         assert!(p.short && p.notes.iter().any(|n| n == crate::short_get::NOTE));
         assert!(!p.notes.iter().any(|n| n == crate::deku_bridge::NOTE));
         assert!(p.remake && p.hearts && p.rewards.extra);
@@ -807,7 +807,7 @@ mod tests {
         let sch: &crate::settings::Schema = crate::settings::schema();
         let ids: Vec<&str> = UNCHANGED.iter().copied().filter(|i| not_yet(i)).collect();
         assert_eq!(ids.len(), UNCHANGED.len() - APPLIED.len());
-        assert!(not_yet("bridge_medallions") && not_yet("ganon_bosskey_medallions"));
+        assert!(!not_yet("bridge_medallions") && not_yet("ganon_bosskey_medallions"));
         assert!(APPLIED.iter().all(|i| !not_yet(i)));
         assert!(!not_yet("shuffle_chests"));
         for id in ids {

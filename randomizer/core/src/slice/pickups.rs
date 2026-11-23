@@ -294,7 +294,6 @@ pub fn at(d: &Data, name: &str, item: &str) -> Option<bool> {
             return Some(true);
         }
         let known: bool = ground_actor(item).is_some() || ks::shield(item).is_some() || ks::placeable(d, item, ks::Spot::Free);
-        // A spot that exists once per age shares one hash at build (crate::slice::copies::share).
         return Some(known);
     }
     None
@@ -428,7 +427,7 @@ mod tests {
         assert!(!free.is_empty());
         for l in &free {
             let n: &str = &w.locs[*l].name;
-            assert!(is_held(n) || d.cat.by_name(n).is_some_and(|c| c.kind == "heart"), "{n}");
+            assert!(is_held(n) || ALWAYS.contains(&n) || d.cat.by_name(n).is_some_and(|c| c.kind == "heart"), "{n}");
         }
         assert!(!p.notes.iter().any(|n| n == NOTE));
     }
@@ -445,13 +444,11 @@ mod tests {
             select(&d, &w, &p, &mut free, &mut left, &mut flow);
             (free.len(), flow)
         };
-        // Ruto's Letter joins with the overworld spots; the Bottom of the Well key is seen but
-        // stays, since small keys do not roam by default.
         let (all, seen): (usize, usize) = count_of("all");
-        assert_eq!(seen, 33 + 98 + 2);
+        assert_eq!(seen, 33 + 98 + 3);
         assert_eq!(all, 33 + 98 + 1);
         let (pieces, _): (usize, usize) = count_of("pieces");
-        assert_eq!(pieces, 17);
+        assert_eq!(pieces, 17 + ALWAYS.len());
         let p: Plan = plan(&on("pieces")).unwrap();
         let mut free: Vec<LocId> = Vec::new();
         let mut left: BM<String, usize> = BM::new();
@@ -459,7 +456,7 @@ mod tests {
         select(&d, &w, &p, &mut free, &mut left, &mut flow);
         for l in &free {
             let name: &str = &w.locs[*l].name;
-            assert!(is_held(name) || d.vanilla_of(name).is_some_and(|v| v.starts_with("Piece of Heart")), "{name}");
+            assert!(is_held(name) || ALWAYS.contains(&name) || d.vanilla_of(name).is_some_and(|v| v.starts_with("Piece of Heart")), "{name}");
         }
     }
 
@@ -498,7 +495,7 @@ mod tests {
             let g: Generated = generate_data(&d, &Settings::default(), &format!("plain {n}"), &GenOpts::default()).unwrap();
             for k in g.seed_file.placements.keys() {
                 if d.cat.by_name(k).is_some_and(is_world) {
-                    assert!(is_held(k) || d.cat.by_name(k).is_some_and(|c| c.kind == "heart"), "{k}");
+                    assert!(is_held(k) || ALWAYS.contains(&k.as_str()) || d.cat.by_name(k).is_some_and(|c| c.kind == "heart"), "{k}");
                 }
             }
         }
@@ -542,8 +539,6 @@ mod tests {
         let d: Data = Data::load().unwrap();
         for n in 0..4 {
             let g: Generated = generate_data(&d, &on("all"), &format!("unsure {n}"), &GenOpts::default()).unwrap();
-            // Their logic follows the actors (the Hyrule Field chest is adult only, the Gerudo
-            // Valley chest stands on the crate ledge), so they take any item.
             for name in ["HF Tektite Grotto Freestanding PoH", "GV Crate Freestanding PoH"] {
                 assert!(g.seed_file.placements.contains_key(name), "{name}");
             }
@@ -572,9 +567,8 @@ mod tests {
         };
         assert!(!freed(&Settings::default()));
         assert!(freed(&keysanity()));
-        for n in ["Shadow Temple Freestanding Key", "Hideout 1 Torch Jail Gerudo Key"] {
-            assert!(!d.cat.by_name(n).is_some_and(is_world), "{n}");
-        }
+        assert!(!d.cat.by_name("Hideout 1 Torch Jail Gerudo Key").is_some_and(is_world));
+        assert!(d.cat.by_name(JAR_SPOT).is_some_and(|l| is_world(l) && is_key_spot(l)));
         assert!(d.cat.by_name(key).is_some_and(|l| is_world(l) && is_key_spot(l) && on_ground(l)));
     }
 
@@ -623,7 +617,7 @@ mod tests {
         for n in 0..4 {
             let g: Generated = generate_data(&d, &on("pieces"), &format!("pieces {n}"), &GenOpts::default()).unwrap();
             for (loc, item) in &g.seed_file.placements {
-                if let Some(l) = d.cat.by_name(loc).filter(|l| is_world(l)) {
+                if let Some(l) = d.cat.by_name(loc).filter(|l| is_world(l) && !ALWAYS.contains(&l.name.as_str())) {
                     assert_eq!(l.kind, "heart", "{loc} holds {item}");
                 }
                 assert_ne!(item, "Recovery Heart", "{loc}");

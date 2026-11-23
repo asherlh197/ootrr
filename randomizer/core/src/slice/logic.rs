@@ -84,17 +84,20 @@ pub fn spec(d: &Data, over: &[(&str, &str)]) -> Res<Spec> {
         Vec::new()
     };
     for it in &d.items {
-        if crate::key_rings::by_item_any(&it.name).is_some() {
+        let heart: bool = crate::slice::generate::HEARTS.iter().any(|h| it.name.starts_with(h));
+        if let Some(r) = crate::key_rings::by_item_any(&it.name) {
+            let active: bool = rs.iter().any(|x| x.item == r.item)
+                || (hideout_ring && r.item == crate::key_rings::HIDEOUT_RING.item);
+            if active {
+                s.add_ring(r.item, r.key, r.count);
+            } else {
+                // Keep the item in its original slot even when the ring is off; dropping it
+                // would shift every later logic item id and move the old pinned seeds.
+                s.add_item(&it.name, it.adv && (hearts || !heart), 0);
+            }
             continue;
         }
-        let heart: bool = crate::slice::generate::HEARTS.iter().any(|h| it.name.starts_with(h));
         s.add_item(&it.name, it.adv && (hearts || !heart), 0);
-    }
-    for r in rs {
-        s.add_ring(r.item, r.key, r.count);
-    }
-    if hideout_ring {
-        s.add_ring(crate::key_rings::HIDEOUT_RING.item, crate::key_rings::HIDEOUT_RING.key, crate::key_rings::HIDEOUT_RING.count);
     }
     s.add_helpers(HELPERS)?;
     let mut files: Vec<Json> = Vec::new();
@@ -340,11 +343,12 @@ mod tests {
         let cut: Search = explore(&w, &vanilla_without(&w, &d, &["Weird Egg"]), &[]);
         let skip: World = world_with(&d, &[("skip_child_zelda", "true")]).unwrap();
         let met: Search = explore(&skip, &vanilla_without(&skip, &d, &["Weird Egg"]), &[]);
-        for i in 1..=8 {
-            let n: String = format!("Market Potion Shop Item {i}");
-            assert!(seen(&all, &w, &n), "{n}");
-            assert!(!seen(&cut, &w, &n), "{n}");
-            assert!(seen(&met, &skip, &n), "{n}");
+        let shelves: Vec<&str> = w.locs.iter().map(|l| l.name.as_str()).filter(|n| crate::flow_extra::potion::shelf(n)).collect();
+        assert_eq!(shelves.len(), 8);
+        for n in shelves {
+            assert!(seen(&all, &w, n), "{n}");
+            assert!(!seen(&cut, &w, n), "{n}");
+            assert!(seen(&met, &skip, n), "{n}");
         }
     }
 

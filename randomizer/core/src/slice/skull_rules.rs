@@ -157,7 +157,6 @@ mod tests {
         assert!(checked > 0);
         assert!(s.won());
         let lost: Vec<&str> = crate::slice::skulls::token_spots(&strict, &v).into_iter().filter(|l| !s.loc_access(*l)).map(|l| strict.locs[l].name.as_str()).collect();
-        // Beans bought from the salesman plant the soil spots (can_plant_bean), so none is lost.
         assert!(lost.is_empty(), "{lost:?}");
         assert_eq!(crate::slice::skulls::reachable_tokens(&strict, &v), 100);
     }

@@ -198,8 +198,12 @@ mod tests {
         let w: World = world_with(&d, &p.logic()).unwrap();
         let forest: &crate::key_rings::Ring = crate::key_rings::by_choice("forest_temple").unwrap();
         let fire: &crate::key_rings::Ring = crate::key_rings::by_choice("fire_temple").unwrap();
-        assert!(w.item(forest.item).is_some());
-        assert!(w.item(fire.item).is_none());
+        let forest_ring: ItemId = w.item(forest.item).unwrap();
+        assert_eq!(w.ring_key(forest_ring), Some((w.item(forest.key).unwrap(), forest.count as u32)));
+        // Inactive rings stay in their original item slots so old seeds keep their ids; they
+        // just are not rings and hand out no keys.
+        let fire_ring: ItemId = w.item(fire.item).unwrap();
+        assert!(w.ring_key(fire_ring).is_none());
 
         let v: Placement = crate::slice::fill::vanilla_place(&w, &d).unwrap();
         let pk: crate::slice::pick::Pick = pick(&d, &w, &p);
@@ -207,7 +211,6 @@ mod tests {
         let ok = |it: ItemId, l: LocId| allowed(&d, &w, &p, it, l);
         let mut notes: Vec<String> = Vec::new();
         replace(&d, &w, &p, &mut base, &pk.free, &ok, &mut notes).unwrap();
-        let forest_ring: ItemId = w.item(forest.item).unwrap();
         let forest_key: ItemId = w.item(forest.key).unwrap();
         let fire_key: ItemId = w.item(fire.key).unwrap();
         assert_eq!(base.item.iter().filter(|i| **i == Some(forest_ring)).count(), 1);

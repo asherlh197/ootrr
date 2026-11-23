@@ -5,6 +5,7 @@ pub mod cows;
 mod data;
 pub mod frogs;
 mod gate;
+pub mod goron_pot;
 mod op;
 pub mod potion;
 pub mod sim;
@@ -17,6 +18,14 @@ pub use gate::{bound, fits, open, pouch, POUCH_ONLY};
 pub use op::{apply as apply_op, How, Once, Op, ITEM};
 
 pub const SETTING: &str = "shuffle_rewards_extra";
+
+pub const GERUDO_CARD: &str = "shuffle_gerudo_card";
+pub const GERUDO_CARD_NUM: u16 = 170;
+pub const GERUDO_CARD_LOC: &str = "Hideout Gerudo Membership Card";
+
+pub fn scripted(name: &str) -> bool {
+    sun::is(name) || goron_pot::is(name)
+}
 
 pub const MERCHANTS: u16 = 97;
 pub const MERCHANTS_SETTING: &str = "shuffle_merchants";
@@ -52,6 +61,7 @@ pub struct Rewards {
     pub frog_songs: bool,
     pub frog_bug: bool,
     pub potion: bool,
+    pub gerudo_card: bool,
     pub scrubs: bool,
     pub scrubs_b: bool,
     pub medigoron: bool,
@@ -96,6 +106,7 @@ impl Rewards {
         let frog_songs: bool = on && toggle(s, frogs::SONGS_SETTING, bad);
         let frog_bug: bool = on && toggle(s, frogs::BUG_SETTING, bad);
         let potion: bool = on && toggle(s, potion::SETTING, bad);
+        let gerudo_card: bool = on && toggle(s, GERUDO_CARD, bad);
         let scrubs: bool = crate::scrubs_a::read(s, on, bad);
         let scrubs_b: bool = crate::scrubs_b::read(s, on, bad);
         Rewards {
@@ -109,6 +120,7 @@ impl Rewards {
             frog_songs,
             frog_bug,
             potion,
+            gerudo_card,
             scrubs,
             scrubs_b,
             medigoron: false,

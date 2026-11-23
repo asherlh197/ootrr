@@ -163,6 +163,10 @@ pub fn judge(d: &Data, w: &World, place: &Placement, placed: &BM<String, String>
         let name: &str = mine.iter().find(|s| s.give == Give::Open).map(|s| s.item.as_str()).unwrap_or("");
         let it: ItemId = w.item(name).ok_or_else(|| E::Msg(format!("{name} is not in the logic item list")))?;
         for s in mine.iter().filter(|s| s.give != Give::Flow) {
+            if s.give == Give::Open && crate::pickup_tiers::runtime(d, &s.loc, f) {
+                v.assign.insert(s.loc.clone(), crate::pickup_tiers::base(f)?.to_string());
+                continue;
+            }
             let Some(l) = w.loc(&s.loc) else {
                 v.bad.push(format!("{} holds {} but is not a logic location", s.loc, s.item));
                 continue;

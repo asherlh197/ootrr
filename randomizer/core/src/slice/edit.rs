@@ -266,7 +266,6 @@ pub fn build_with(seed: &SeedFile, romfs: &P, load: &P, mod_name: &str, host: Ho
             }
         }
     }
-    // Spots that exist once per age share one actor hash, so their item is taken once.
     crate::slice::copies::share(&mut rf, &d, &seed.placements, &mut edits)?;
     let pk: Pack = Pack::begin_for(load, TITLE_ID, mod_name, host)?;
     let mut rst: Option<Rst> = None;
@@ -495,7 +494,7 @@ pub fn build_with(seed: &SeedFile, romfs: &P, load: &P, mod_name: &str, host: Ho
                     crate::slice::flow_wrap::PRIZES.iter().find(|x| x.0 == loc).map(|x| x.1)
                 }
             }),
-            key: gift_keys.iter().find(|g| g.location == loc).map(|g| (g.item, g.dungeon)),
+            key: gift_keys.iter().find(|g| g.location == loc).map(|g| (g.item, g.dungeon)).or_else(|| flow_cs.iter().find(|c| c.loc == loc && crate::flow_extra::scripted(loc)).map(|c| (c.item, c.dungeon))),
             line: if p.debug_names { crate::debug_names::scene_line(&d, loc) } else { None },
         }
     };
@@ -547,6 +546,9 @@ pub fn build_with(seed: &SeedFile, romfs: &P, load: &P, mod_name: &str, host: Ho
     if seed.placements.contains_key(crate::flow_extra::sun::LOC) {
         crate::story_skip::stage_sun_give(&mut rf, &mut late, &work, &give_for(crate::flow_extra::sun::LOC))?;
     }
+    if seed.placements.contains_key(crate::flow_extra::goron_pot::LOC) {
+        crate::story_skip::stage_goron_pot_give(&mut rf, &mut late, &work, &give_for(crate::flow_extra::goron_pot::LOC))?;
+    }
     if p.qol.free_scarecrow {
         crate::story_skip::stage_late(&mut rf, &mut late, &work, crate::qol::scarecrow::FLOW, crate::qol::scarecrow::patch_flow)?;
     }
@@ -567,6 +569,7 @@ pub fn build_with(seed: &SeedFile, romfs: &P, load: &P, mod_name: &str, host: Ho
     // A Bow or Slingshot from any gift or pickup brings its starting bag, as a chest's does.
     crate::starter_bags::stage(&mut rf, &mut late, &work)?;
     crate::dungeon_packs::stage(&mut rf, &mut late, &work, &crate::dungeon_packs::picked_up(&d, seed))?;
+    crate::pickup_tiers::stage(&mut rf, &mut late, &work, &crate::pickup_tiers::families(&d, seed))?;
     // Rooms that could lock Link in once their item is shuffled away (crate::dungeon_fixes).
     crate::dungeon_fixes::stage(&mut rf, &mut late, &work)?;
 
@@ -665,7 +668,8 @@ pub fn build_with(seed: &SeedFile, romfs: &P, load: &P, mod_name: &str, host: Ho
         }
         // Dungeon items on the ground and at Gold Skulltulas credit their dungeon after the get.
         crate::debug_names::stage_key_credit(&mut rf, &work, &mut tail, &key_cs)?;
-        crate::debug_names::stage_credit_flows(&mut rf, &d, &work, &mut tail, &flow_cs, &sales)?;
+        let listed: Vec<crate::debug_names::LocCredit> = flow_cs.iter().filter(|c| !crate::flow_extra::scripted(&c.loc)).cloned().collect();
+        crate::debug_names::stage_credit_flows(&mut rf, &d, &work, &mut tail, &listed, &sales)?;
         crate::debug_names::stage_credit_chests(&mut rf, &d, &work, &mut tail, &chest_cs)?;
         for o in tail {
             pk.write_romfs(&o.path, &o.z)?;
@@ -855,7 +859,7 @@ mod tests {
             std::fs::write(&p, other.to_zs().unwrap()).unwrap();
         }
         let b: Built = build_for(&g.seed_file, &root, &load, "ootrr-longshot", Host::Longshot).unwrap();
-        assert_eq!(b.root, load.join("ootrr-longshot"));
+        assert_eq!(b.root, load.join(TITLE_ID).join("ootrr-longshot"));
         assert!(!b.root.join("coop-seed.txt").exists());
         let ours: Rst = Rst::parse(&rf.zs.decompress(&std::fs::read(b.root.join("romfs").join(rsizetable::TABLE_PATH)).unwrap()).unwrap()).unwrap();
         assert_eq!(ours.get("OotrrTest/only_in_other.bin"), Some(4321));
@@ -988,9 +992,12 @@ mod tests {
             let mut before: Vec<String> = Vec::new();
             let mut after: Vec<String> = Vec::new();
             for (loc, actor) in &given {
-                // The Gerudo Valley waterfall piece has an actor of its own, and moves as the plain one.
                 let v: &str = &d.cat.by_name(loc).unwrap().item;
-                before.push(if v == "Obj_GerudoValley_Heart_Piece" { "Obj_Heart_Piece".to_string() } else { v.to_string() });
+                before.push(match v {
+                    "Obj_GerudoValley_Heart_Piece" => "Obj_Heart_Piece".to_string(),
+                    "Obj_Bottle_Letter" => "Item_Bottle_Letter".to_string(),
+                    _ => v.to_string(),
+                });
                 after.push(actor.clone());
             }
             before.sort();

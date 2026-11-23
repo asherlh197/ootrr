@@ -171,10 +171,27 @@ pub fn make_with(o: &Opts, seed: &str, room: Room, forced: &[String]) -> Res<Lay
     let us: Vec<(String, Vec<&Slot>)> = units(t);
     let open: Vec<&(String, Vec<&Slot>)> = us.iter().filter(|(_, ss)| !ss.iter().any(|s| deals.contains(&s.name))).collect();
     let mut given: BM<String, Goods> = BM::new();
+    let goods_of = |ss: &[&Slot]| Goods { item: ss[0].item.clone(), actor: ss[0].actor.clone(), price: ss[0].price };
+    let mut at_pos: Vec<Vec<Goods>> = Vec::new();
     for at in 0..8usize {
-        let here: Vec<&(String, Vec<&Slot>)> = open.iter().copied().filter(|(_, ss)| ss[0].slot == at).collect();
-        let mut goods: Vec<Goods> = here.iter().map(|(_, ss)| Goods { item: ss[0].item.clone(), actor: ss[0].actor.clone(), price: ss[0].price }).collect();
+        let mut goods: Vec<Goods> = open.iter().filter(|(_, ss)| ss[0].slot == at).map(|(_, ss)| goods_of(ss)).collect();
         rng.shuffle(&mut goods);
+        at_pos.push(goods);
+    }
+    let needed = |item: &str| t.keep.iter().any(|k| k == item) || t.pin.iter().any(|(p, _)| p == item);
+    for (_, ss) in us.iter().filter(|(_, ss)| ss.iter().any(|s| deals.contains(&s.name))) {
+        let g: Goods = goods_of(ss);
+        if !needed(&g.item) || own_pool(&g.item).is_some() || at_pos.iter().flatten().any(|x| x.item == g.item) {
+            continue;
+        }
+        let at: usize = ss[0].slot;
+        let spot: Option<(usize, usize)> = std::iter::once(at).chain((0..8).filter(|p| *p != at)).find_map(|p| at_pos[p].iter().rposition(|x| !needed(&x.item)).map(|i| (p, i)));
+        if let Some((p, i)) = spot {
+            at_pos[p][i] = g;
+        }
+    }
+    for (at, mut goods) in at_pos.into_iter().enumerate() {
+        let here: Vec<&(String, Vec<&Slot>)> = open.iter().copied().filter(|(_, ss)| ss[0].slot == at).collect();
         let mut keys: Vec<String> = here.iter().map(|(k, _)| k.clone()).collect();
         for (item, shop) in &t.pin {
             let Some(i) = goods.iter().position(|g| &g.item == item) else {
@@ -303,19 +320,26 @@ mod tests {
                 assert_eq!(l.deal_count(), 8 * n as usize);
                 for sh in t.shops.iter() {
                     for (k, i) in sh.deal_order.iter().enumerate() {
-                        let p: &Place = l.get(&t.at(&sh.shop, *i).unwrap().name).unwrap();
+                        let slot = t.at(&sh.shop, *i).unwrap();
+                        let p: &Place = l.get(&slot.name).unwrap();
                         assert_eq!(p.deal, sh.deals && k < n as usize, "{} {i}", sh.shop);
                         if p.deal {
-                            assert!(t.rupees.iter().any(|r| r.0 == p.pool));
+                            match own_pool(&slot.item) {
+                                Some(own) => assert_eq!(p.pool, own, "{}", slot.name),
+                                None => assert!(t.rupees.iter().any(|r| r.0 == p.pool), "{}", slot.name),
+                            }
                             assert!((10..=300).contains(&p.price) && p.price % 5 == 0);
                         }
                     }
                 }
                 for k in &t.keep {
-                    assert!(count(&l, k) >= 1, "{k} lost at deals {n}");
+                    let pooled: bool = l.places.iter().any(|p| p.deal && own_pool(k) == Some(p.pool.as_str()));
+                    assert!(count(&l, k) >= 1 || pooled, "{k} lost at deals {n}");
                 }
                 for (item, shop) in &t.pin {
-                    assert!(l.places.iter().any(|p| &p.item == item && t.slot(&p.loc).unwrap().shop == *shop), "{item} left {shop}");
+                    let kept: bool = l.places.iter().any(|p| &p.item == item && t.slot(&p.loc).unwrap().shop == *shop);
+                    let pooled: bool = l.places.iter().any(|p| p.deal && own_pool(item) == Some(p.pool.as_str()) && t.slot(&p.loc).unwrap().shop == *shop);
+                    assert!(kept || pooled, "{item} left {shop}");
                 }
             }
         }

@@ -388,7 +388,7 @@ mod tests {
         let d: Data = d();
         let skull: &str = d.cat.locs.iter().find(|l| l.kind == "gs").map(|l| l.name.as_str()).unwrap();
         assert_eq!(spot(&d, skull), None);
-        assert_eq!(spot(&d, "KF Shop Item 1"), Some(Spot::Shelf));
+        assert_eq!(spot(&d, "KF Shop Right Side Top Left"), Some(Spot::Shelf));
         let heart: &str = d.cat.locs.iter().find(|l| l.kind == "bossheart").map(|l| l.name.as_str()).unwrap();
         assert_eq!(spot(&d, heart), Some(Spot::Ground));
     }

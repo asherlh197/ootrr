@@ -156,8 +156,7 @@ mod tests {
             assert_eq!(l.age, want, "{}", l.name);
             n += 1;
         }
-        // 16 freestanding rows plus Ruto's Letter (LH Underwater Item).
-        assert_eq!(n, 14 + 17);
+        assert_eq!(n, 14 + 18);
     }
 
     #[test]
@@ -165,7 +164,7 @@ mod tests {
         let d: Data = Data::load().unwrap();
         let by = |k: &str, c: Conf| d.cat.locs.iter().filter(|l| l.kind == k && l.conf == c && !crate::spots::free::is(&d, &l.name)).count();
         assert_eq!(d.cat.locs.iter().filter(|l| crate::spots::free::is(&d, &l.name)).count(), 98);
-        assert_eq!((by("heart", Conf::Item), by("heart", Conf::Forced), by("heart", Conf::Pool)), (6, 8, 0));
+        assert_eq!((by("heart", Conf::Item), by("heart", Conf::Forced), by("heart", Conf::Pool)), (7, 8, 0));
         assert_eq!((by("freestanding", Conf::Item), by("freestanding", Conf::Forced), by("freestanding", Conf::Pool)), (0, 2, 15));
         let gap: Vec<&crate::catalog::GapRem> = d.cat.gap_rem.iter().filter(|g| g.kind == "freestanding").collect();
         assert_eq!(gap.len(), 114);

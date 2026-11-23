@@ -871,9 +871,8 @@ mod tests {
         s.set("shuffle_rewards", Value::s("off")).unwrap();
         s.set("shuffle_chests", Value::s("off")).unwrap();
         let off: Generated = generate_data(&d, &s, "x", &GenOpts::default()).unwrap();
-        // Only the hearts are left, and they stay at their own spots.
-        assert!(off.seed_file.placements.values().all(|i| HEARTS.contains(&i.as_str())));
-        assert_eq!(off.counts.changed, 0);
+        assert!(off.seed_file.placements.values().all(|i| HEARTS.contains(&i.as_str()) || i == "Rutos Letter"));
+        assert!(off.seed_file.placements.contains_key(crate::slice::pickups::ALWAYS[0]));
         s.set("shuffle_chests", Value::s("overworld")).unwrap();
         let o: Generated = generate_data(&d, &s, "x", &GenOpts::default()).unwrap();
         assert!(o.counts.randomized >= 2);
@@ -1029,9 +1028,6 @@ mod tests {
             let g: Generated = generate_data(&d, &s, &format!("dungeon items {n}"), &GenOpts::default()).unwrap();
             for (loc, item) in &g.seed_file.placements {
                 if d.flow.by_name(loc).is_some() {
-                    // An event hands out any item its grant can give (an upgrade through the tier checks
-                    // around every edit of the scene, crate::slice::flow_wrap::grants); a dungeon item
-                    // is credited by crate::gift_keys or a location credit (crate::debug_names).
                     let fits = |i: &crate::slice::data::Item| crate::slice::flow_rules::gift_takes(&d, i) || d.flow_accepts(i);
                     assert!(d.item(item).is_some_and(fits) || d.vanilla_of(loc) == Some(item.as_str()), "{loc} holds {item}");
                 }
@@ -1063,7 +1059,6 @@ mod tests {
                 let Some(f) = d.family(item) else {
                     continue;
                 };
-                // The heart's pickup is the tier slice::tier_order fixes there.
                 assert!(crate::slice::key_spots::placeable(&d, item, crate::slice::key_spots::Spot::Free), "{loc} holds {item}");
                 let tier: Option<&String> = order.assign.get(loc);
                 assert!(tier.is_some_and(|t| crate::slice::tier_order::rank(f, t).is_some()), "{loc} holds {item} as {tier:?}");
@@ -1083,7 +1078,6 @@ mod tests {
         assert!(!hearts.is_empty());
         for n in hearts {
             if let Some(l) = w.loc(n) {
-                // It stands there as the ground token pickup (Obj_Token_GoldLand).
                 assert!(allowed(&d, &w, &p, t, l), "{n}");
             }
         }
@@ -1120,6 +1114,25 @@ mod tests {
         assert!(go(&all_chests(), &["KF Midos Top Left Chest=Boomerang", "KF Midos Top Right Chest=Boomerang"]).contains("no copy left"));
         assert!(go(&all_chests(), &["KF Midos Top Left Chest=Boomerang", "KF Midos Top Left Chest=Deku Shield"]).contains("more than once"));
         assert!(go(&with(&[("shuffle_chests", "off")]), &["KF Midos Top Left Chest=Boomerang"]).contains("not shuffled"));
+    }
+
+    #[test]
+    fn the_gerudo_membership_card_follows_its_setting() {
+        let d: Data = Data::load().unwrap();
+        let free = |s: &Settings| -> bool {
+            let p: Plan = plan(s).unwrap();
+            let w: World = world_with(&d, &p.logic()).unwrap();
+            crate::slice::pick::pick(&d, &w, &p).free.iter().any(|l| w.locs[*l].name == crate::flow_extra::GERUDO_CARD_LOC)
+        };
+        assert!(free(&Settings::default()));
+        let mut off: Settings = Settings::default();
+        off.set(crate::flow_extra::GERUDO_CARD, Value::Bool(false)).unwrap();
+        assert!(!free(&off));
+        let g: Generated = generate_data(&d, &off, "vanilla card", &GenOpts::default()).unwrap();
+        assert!(!g.seed_file.placements.contains_key(crate::flow_extra::GERUDO_CARD_LOC));
+        let mut fast: Settings = Settings::default();
+        fast.set("gerudo_fortress", Value::s("fast")).unwrap();
+        assert!(!free(&fast));
     }
 
     #[test]
