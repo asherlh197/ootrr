@@ -113,7 +113,7 @@ mod tests {
     #[test]
     fn an_out_of_order_hookshot_at_a_freestanding_spot_is_repaired_by_swaps_and_the_seed_stays_beatable() {
         let d: Data = Data::load().unwrap();
-        let s: Settings = with(&[("shuffle_chests", "all"), ("shuffle_freestanding_items", "all")]);
+        let s: Settings = with(&[("shuffle_chests", "all"), ("shuffle_freestanding_items", "all"), ("shuffle_smallkeys", "vanilla")]);
         let p: Plan = plan(&s).unwrap();
         let w: World = world_with(&d, &p.logic()).unwrap();
         let pk: Pick = pick(&d, &w, &p);

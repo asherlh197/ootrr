@@ -31,6 +31,10 @@ impl Host {
         matches!(self, Host::Hookshot | Host::Longshot | Host::Nx2navi)
     }
 
+    pub fn no_title(self) -> bool {
+        matches!(self, Host::Hookshot | Host::Nx2navi)
+    }
+
     pub fn one_table(self) -> bool {
         matches!(self, Host::Hookshot | Host::Longshot)
     }
@@ -46,7 +50,7 @@ impl Host {
 }
 
 fn root_of(load: &P, title: &str, name: &str, host: Host) -> PB {
-    if host.flat() {
+    if host.no_title() {
         load.join(name)
     } else {
         load.join(title.to_ascii_uppercase()).join(name)

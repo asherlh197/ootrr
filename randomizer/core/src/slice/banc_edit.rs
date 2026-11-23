@@ -28,12 +28,7 @@ pub fn edit_file(file: &str, raw: &[u8], ts: &[Target]) -> Res<Option<Edited>> {
     edit_file_with(file, raw, ts, false, &BS::new(), &BM::new(), &BS::new())
 }
 
-/// `small` lists boss heart hashes that become a small chest (chest size matches contents).
-/// `lifts` raises a freestanding spot swapped to one of those pickup actors by that many metres,
-/// so its item model clears the ground (crate::pickup_pack::lift).
-/// `wrapped` lists chests whose dungeon item is credited after their story event
-/// (crate::debug_names::stage_credit_chests); the small key sweep leaves them alone.
-pub fn edit_file_with(file: &str, raw: &[u8], ts: &[Target], keys: bool, small: &BS<u64>, lifts: &BM<String, f32>, wrapped: &BS<u64>) -> Res<Option<Edited>> {
+pub fn edit_file_with(file: &str, raw: &[u8], ts: &[Target], keys: bool, small: &BS<u64>, lifts: &BM<String, (f32, f32)>, wrapped: &BS<u64>) -> Res<Option<Edited>> {
     let mut y: Byml = Byml::parse(raw)?;
     let mut hits: Vec<(usize, Found)> = Vec::new();
     let mut used: Vec<(String, Size)> = Vec::new();
@@ -52,8 +47,11 @@ pub fn edit_file_with(file: &str, raw: &[u8], ts: &[Target], keys: bool, small: 
             match pu::swap_gyaml(&mut y, t.hash, &t.old_actor, &t.new_actor) {
                 0 => set_drop_ev(&mut y, t.hash, &t.old_actor, &t.new_actor, t.ev)?,
                 k => {
-                    if let Some(dy) = lifts.get(&t.new_actor) {
+                    if let Some((dy, k)) = lifts.get(&t.new_actor) {
                         crate::pickup_pack::lift::raise(&mut y, t.hash, *dy);
+                        if *k != 1.0 {
+                            crate::pickup_pack::lift::scale(&mut y, t.hash, *k);
+                        }
                     }
                     k
                 }

@@ -9,7 +9,8 @@ pub fn at(d: &Data, name: &str, item: &str) -> Option<bool> {
     if d.pots.has(name) {
         let known: bool = pickup::of(item).is_some() || crate::slice::key_spots::placeable(d, item, crate::slice::key_spots::Spot::Pot);
         let kind: bool = d.pots.kind_of(name).is_some();
-        return Some(known && kind && crate::slice::copies::fits(d, name, item));
+        // A spot that exists once per age shares one hash at build (crate::slice::copies::share).
+        return Some(known && kind);
     }
     None
 }
@@ -61,7 +62,7 @@ mod tests {
     }
 
     #[test]
-    fn pots_take_only_shipped_pickups_and_pot_junk_stays_out_of_chests() {
+    fn pots_take_any_item_with_a_pickup() {
         let d: Data = Data::load().unwrap();
         let w: World = world(&d).unwrap();
         let pot: &str = "KF House of Twins Pot 1";
@@ -73,10 +74,11 @@ mod tests {
         assert_eq!(probe(&d, &w, "Gold Skulltula Token", "Dodongos Cavern Right Side Pot 1"), Some(true));
         assert_eq!(probe(&d, &w, "Heart Container", "Dodongos Cavern Right Side Pot 1"), Some(true));
         assert_eq!(probe(&d, &w, "Recovery Heart", pot), Some(true));
-        assert_eq!(probe(&d, &w, "Progressive Strength Upgrade", pot), Some(false));
-        assert_eq!(probe(&d, &w, "Piece of Heart", pot), Some(false));
-        assert_eq!(probe(&d, &w, "Ocarina", pot), Some(false));
-        assert_eq!(probe(&d, &w, "Small Key (Forest Temple)", pot), Some(false));
+        assert_eq!(probe(&d, &w, "Progressive Strength Upgrade", pot), Some(true));
+        // A pot that exists once per age shares one hash at build (crate::slice::copies::share).
+        assert_eq!(probe(&d, &w, "Piece of Heart", pot), Some(true));
+        assert_eq!(probe(&d, &w, "Ocarina", pot), Some(true));
+        assert_eq!(probe(&d, &w, "Small Key (Forest Temple)", pot), Some(true));
         assert_eq!(probe(&d, &w, "Deku Nuts (5)", chest), None);
         assert_eq!(probe(&d, &w, "Fairy Drop", chest), Some(false));
         assert_eq!(probe(&d, &w, "Progressive Hookshot", chest), None);
@@ -119,7 +121,6 @@ mod tests {
                         let ok: bool = pickup::of(item).is_some() || crate::slice::key_spots::placeable(&d, item, crate::slice::key_spots::Spot::Pot);
                         assert!(ok, "{loc} holds {item}");
                         assert!(d.pots.kind_of(loc).is_some(), "{loc} holds {item} but is no holder kind this build knows");
-                        assert!(crate::slice::copies::fits(&d, loc, item), "{loc} holds {item}");
                         if d.vanilla_of(loc) != Some(item.as_str()) {
                             moved += 1;
                         }
@@ -176,7 +177,7 @@ mod tests {
     }
 
     #[test]
-    fn a_beehive_takes_refills_and_gear_but_no_counted_item() {
+    fn a_beehive_takes_any_item_with_a_pickup() {
         let d: Data = Data::load().unwrap();
         let w: World = world(&d).unwrap();
         let hive: &str = "Kak Hole Beehive 3";
@@ -187,11 +188,11 @@ mod tests {
         assert_eq!(probe(&d, &w, "Arrows (10)", hive), Some(true));
         assert_eq!(probe(&d, &w, "Fire Arrows", hive), Some(true));
         assert_eq!(probe(&d, &w, "Megaton Hammer", hive), Some(true));
-        assert_eq!(probe(&d, &w, "Gold Skulltula Token", hive), Some(false));
-        assert_eq!(probe(&d, &w, "Piece of Heart", hive), Some(false));
-        assert_eq!(probe(&d, &w, "Heart Container", hive), Some(false));
-        assert_eq!(probe(&d, &w, "Small Key (Forest Temple)", hive), Some(false));
-        assert_eq!(probe(&d, &w, "Progressive Hookshot", hive), Some(false));
+        assert_eq!(probe(&d, &w, "Gold Skulltula Token", hive), Some(true));
+        assert_eq!(probe(&d, &w, "Piece of Heart", hive), Some(true));
+        assert_eq!(probe(&d, &w, "Heart Container", hive), Some(true));
+        assert_eq!(probe(&d, &w, "Small Key (Forest Temple)", hive), Some(true));
+        assert_eq!(probe(&d, &w, "Progressive Hookshot", hive), Some(true));
     }
 
     #[test]

@@ -1,7 +1,6 @@
-use crate::error::{Error as E, Res};
+use crate::error::Res;
 use crate::pickup_persist::{check_rows, check_swaps_with, rows, Extra};
 use crate::romfs::Romfs;
-use crate::slice::copies::fits;
 use crate::slice::data::Data;
 use crate::slice::edit::Target;
 use crate::slice::pickups::on_ground;
@@ -13,9 +12,6 @@ pub fn check(rf: &mut Romfs, d: &Data, ts: &[Target], extra: &Extra) -> Res<()> 
     let added: Vec<&Target> = world.into_iter().filter(|t| extra.has(&t.new_actor)).collect();
     if added.is_empty() {
         return Ok(());
-    }
-    if let Some(t) = added.iter().find(|t| !fits(d, &t.name, &t.new_item)) {
-        return Err(E::Msg(format!("{} exists once per age, so {} placed there could be taken twice", t.name, t.new_item)));
     }
     // The build adds the row of these spots itself (pickups::NEW_ROWS).
     let spots: Vec<(u64, &str)> = added.iter().filter(|t| !crate::slice::pickups::needs_row(&t.name)).map(|t| (t.hash, t.new_actor.as_str())).collect();
@@ -217,9 +213,9 @@ mod tests {
         for t in two.iter_mut() {
             t.new_item = "Piece of Heart".to_string();
         }
-        let e: String = check(&mut rf, &d, &two, &good).unwrap_err().to_string();
-        assert!(e.contains("once per age"), "{e}");
-        assert!(fits(&d, TWIN, "Megaton Hammer"));
+        // A spot that exists once per age takes any item: the build gives its copies one hash
+        // (crate::slice::copies::share).
+        check(&mut rf, &d, &two, &good).unwrap();
         let mut moved: Vec<Target> = ts.clone();
         moved[0].hash = 1;
         let e: String = check(&mut rf, &d, &moved, &good).unwrap_err().to_string();

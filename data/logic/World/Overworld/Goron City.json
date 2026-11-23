@@ -122,14 +122,14 @@
         "region_name": "GC Shop",
         "scene": "GC Shop",
         "locations": {
-            "GC Shop Item 1": "True",
-            "GC Shop Item 2": "True",
-            "GC Shop Item 3": "True",
-            "GC Shop Item 4": "True",
-            "GC Shop Item 5": "True",
-            "GC Shop Item 6": "True",
-            "GC Shop Item 7": "True",
-            "GC Shop Item 8": "True"
+            "GC Shop Right Side Top Left": "True",
+            "GC Shop Right Side Top Right": "True",
+            "GC Shop Right Side Bottom Left": "True",
+            "GC Shop Right Side Bottom Right": "True",
+            "GC Shop Left Side Bottom Right": "True",
+            "GC Shop Left Side Top Left": "True",
+            "GC Shop Left Side Top Right": "True",
+            "GC Shop Left Side Bottom Left": "True"
         },
         "exits": {
             "Goron City": "True"

@@ -782,7 +782,7 @@ mod tests {
             chests += ok as usize;
         }
         assert!(chests > 100, "{chests}");
-        for n in ["Song from Impa", "Kak Impas House Cow", "KF Shop Item 1", "Queen Gohma", "GV Waterfall Freestanding PoH"] {
+        for n in ["Song from Impa", "Kak Impas House Cow", "KF Shop Right Side Bottom Left", "Queen Gohma", "GV Waterfall Freestanding PoH"] {
             if let Some(l) = w.loc(n) {
                 assert!(!allowed(&d, &w, &p, item, l), "{n}");
             }

@@ -13,7 +13,7 @@ pub const HIGH: i32 = 995;
 pub const FLOOR: i32 = 10;
 
 pub const NOTE: &str = "Shop shelves are shuffled. The shop goods trade places between the eight shelf shops, each keeps its own price, and the logic needs a bigger wallet for anything above 200 rupees. Experimental, untested in the game.";
-pub const DEALS: &str = "Special deals sell a random item once, through a new shelf actor per item and price. A deal can hold any item a shelf can sell, dungeon items included (the shop credits their dungeon), and songs only when songs can go anywhere. Deals take the right side of each shop first (Items 7, 5, 8 and 6, then 3, 1, 4 and 2), like shopsanity in Ship of Harkinian, and the shop goods they replace move to the other shops. In the Kokiri, Goron and Zora Shops, which have a keeper per age, a deal bought from one keeper is sold out at the other too. Experimental, only one Kokiri Shop deal is tested in the game.";
+pub const DEALS: &str = "Special deals sell a random item once, through a new shelf actor per item and price. A deal can hold any item a shelf can sell, dungeon items included (the shop credits their dungeon), and songs only when songs can go anywhere. Deals take the right side of each shop first (Right Side Top Left, Top Right, Bottom Left, Bottom Right), then the left side; the shop goods of a deal shelf join the item pool (a Deku Shield or Hylian Shield as itself, ammo as its pool ammo, bottle contents as filler). The other shelves sell the goods of the same shelf position from any shop. In the Kokiri, Goron and Zora Shops, which have a keeper per age, a deal bought from one keeper is sold out at the other too. Experimental, only one Kokiri Shop deal is tested in the game.";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Level {
@@ -87,13 +87,13 @@ fn with_deals(s: Setting) -> Setting {
 pub fn settings() -> Vec<Setting> {
     vec![
         Setting::choice(58, SETTING, "shuffle", "Shopsanity", "off")
-            .tip("Whether the shelves of the eight shelf shops sell shuffled goods or random items, like shopsanity in the N64 randomizer. A slot that sells a random item is a special deal. The Happy Mask Shop gets no special deals. A Goron or Zora Tunic moved to another shop costs a random price in the shopsanity range, and a child can buy it. Prices above 200 rupees need a bigger wallet in the logic. Experimental, none of these edits are tested in the game yet except one Kokiri Shop deal.")
+            .tip("Whether the shelves of the eight shelf shops sell shuffled goods or random items, like shopsanity in the N64 randomizer. A slot that sells a random item is a special deal. The Happy Mask Shop gets no special deals. Shop goods keep their own price wherever they go (a tunic costs 600), and a child can buy a tunic. Prices above 200 rupees need a bigger wallet in the logic. Experimental, none of these edits are tested in the game yet except one Kokiri Shop deal.")
             .opt("off", "Off", "Every shop sells its usual goods.")
-            .opt("shuffle", "0 Items", "The usual shop goods move between the shops and keep their prices, nothing new is sold.")
-            .opt("deals_1", "1 Item", "One slot in each shop is a special deal that sells a random item once, the other slots sell shuffled shop goods.")
-            .opt("deals_2", "2 Items", "Two slots in each shop are special deals, the other slots sell shuffled shop goods.")
-            .opt("deals_3", "3 Items", "Three slots in each shop are special deals, the other slots sell shuffled shop goods.")
-            .opt("deals_4", "4 Items", "The four right side slots of each shop are special deals, the left side sells shuffled shop goods.")
+            .opt("shuffle", "0 Items", "The usual shop goods move between the shops, each to the same shelf position in another shop, and keep their prices. Nothing new is sold.")
+            .opt("deals_1", "1 Item", "One right side shelf in each shop is a special deal that sells a random item once, its goods join the item pool. The other shelves sell shop goods shuffled by shelf position.")
+            .opt("deals_2", "2 Items", "Two right side shelves in each shop are special deals, their goods join the item pool. The other shelves sell shop goods shuffled by shelf position.")
+            .opt("deals_3", "3 Items", "Three right side shelves in each shop are special deals, their goods join the item pool. The other shelves sell shop goods shuffled by shelf position.")
+            .opt("deals_4", "4 Items", "The four right side shelves of each shop are special deals and their goods join the item pool. The left side sells the left side goods of every shop, each shuffled with the same shelf position elsewhere (Left Side Bottom Left with Left Side Bottom Left).")
             .opt("random", "Random", "Each shop gets 0 to 4 special deals, the Kokiri Shop at least one."),
         with_deals(
             Setting::choice(95, PRICES, "shuffle", "Shopsanity Prices", "cheap")

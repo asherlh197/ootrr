@@ -19,8 +19,7 @@ pub fn after(seed: &SeedFile, romfs: &P, load: &P, mod_name: &str, host: Host, m
     let d: Data = Data::load()?;
     let jobs: Vec<Job> = crate::shops::jobs::of(&d, &l)?;
     let base: PB = b.root.join("romfs");
-    let credits: Vec<crate::shelf::hook::Credit> = credits(&d, seed, &jobs);
-    let done: Done = run_with(romfs, Some(&base), load, mod_name, host, &jobs, &credits)?;
+    let done: Done = run_with(romfs, Some(&base), load, mod_name, host, &jobs, &[])?;
     if done.root != b.root {
         return Err(E::Msg(format!("the shelf files went to {} and not to the seed mod {}", done.root.display(), b.root.display())));
     }
@@ -31,24 +30,6 @@ pub fn after(seed: &SeedFile, romfs: &P, load: &P, mod_name: &str, host: Host, m
         let _ = writeln!(b.report, "  {x}");
     }
     Ok(b)
-}
-
-/// The deal slots that sell a dungeon item. A small key credits itself natively unless keys roam
-/// (its pouch add is quiet then); boss keys, maps and compasses never do.
-pub fn credits(d: &Data, seed: &SeedFile, jobs: &[Job]) -> Vec<crate::shelf::hook::Credit> {
-    let roam: bool = crate::slice::support::plan(&seed.settings().map(|s| s.settings).unwrap_or_default()).map(|p| p.keys_roam()).unwrap_or(false);
-    let mut out: Vec<crate::shelf::hook::Credit> = Vec::new();
-    for j in jobs {
-        let Some(item) = seed.placements.get(&j.label) else { continue };
-        let Some(i) = d.item(item) else { continue };
-        let Some(k) = crate::gift_keys::Item::of(&i.kind) else { continue };
-        if k == crate::gift_keys::Item::Small && !roam {
-            continue;
-        }
-        let Some(dg) = i.dungeon.as_deref().and_then(crate::dungeon_grant::struct_of) else { continue };
-        out.push(crate::shelf::hook::Credit { counters: j.counters.clone(), item: k, dungeon: dg });
-    }
-    out
 }
 
 fn lines_for(l: &Layout, jobs: &[Job], done: &Done) -> String {

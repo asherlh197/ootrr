@@ -46,12 +46,12 @@
             "Kak Child Crate 4": "is_child and can_break_crate",
             "Kak Child Crate 5": "is_child and can_break_crate",
             "Kak Child Construction Wonderitem": "is_child",
-            "Kak GS House Under Construction": "is_child and (at_night or gold_skulls_ignore_daytime)",
-            "Kak GS Skulltula House": "is_child and (at_night or gold_skulls_ignore_daytime)",
-            "Kak GS Near Gate Guard": "is_child and (at_night or gold_skulls_ignore_daytime)",
-            "Kak GS Tree": "is_child and (at_night or gold_skulls_ignore_daytime) and can_bonk",
+            "Kak GS House Under Construction": "is_child and can_get_night_gs",
+            "Kak GS Skulltula House": "is_child and can_get_night_gs",
+            "Kak GS Near Gate Guard": "is_child and can_get_night_gs",
+            "Kak GS Tree": "is_child and can_get_night_gs and can_bonk",
             "Kak GS Watchtower": "
-                is_child and (at_night or gold_skulls_ignore_daytime) and
+                is_child and can_get_night_gs and
                 (Slingshot or has_bombchus or (logic_kakariko_tower_gs and (Sticks or Kokiri_Sword)))",
             "Bug Rock": "has_bottle"
         },
@@ -94,7 +94,7 @@
         "scene": "Kakariko Village",
         "hint": "KAKARIKO_VILLAGE",
         "locations": {
-            "Kak GS Above Impas House": "is_adult and (at_night or gold_skulls_ignore_daytime)"
+            "Kak GS Above Impas House": "is_adult and can_get_night_gs"
         },
         "exits": {
             "Kak Impas Ledge": "True",
@@ -199,9 +199,7 @@
             "Drain Well": "is_child and can_play(Song_of_Storms)"
         },
         "locations": {
-            "Kak Windmill Freestanding PoH": "
-                can_use(Boomerang) or
-                (logic_windmill_poh and is_adult) or 'Dampes Windmill Access'",
+            "Kak Windmill Freestanding PoH": "(logic_windmill_poh and is_adult) or 'Dampes Windmill Access'",
             "Song from Windmill": "is_adult and Ocarina"
         },
         "exits": {
@@ -212,14 +210,14 @@
         "region_name": "Kak Bazaar",
         "scene": "Kak Bazaar",
         "locations": {
-            "Kak Bazaar Item 1": "True",
-            "Kak Bazaar Item 2": "True",
-            "Kak Bazaar Item 3": "True",
-            "Kak Bazaar Item 4": "True",
-            "Kak Bazaar Item 5": "True",
-            "Kak Bazaar Item 6": "True",
-            "Kak Bazaar Item 7": "True",
-            "Kak Bazaar Item 8": "True"
+            "Kak Bazaar Right Side Bottom Left": "True",
+            "Kak Bazaar Right Side Top Left": "True",
+            "Kak Bazaar Right Side Top Right": "True",
+            "Kak Bazaar Left Side Top Left": "True",
+            "Kak Bazaar Left Side Bottom Right": "True",
+            "Kak Bazaar Left Side Top Right": "True",
+            "Kak Bazaar Right Side Bottom Right": "True",
+            "Kak Bazaar Left Side Bottom Left": "True"
         },
         "exits": {
             "Kakariko Village": "True"
@@ -239,14 +237,14 @@
         "region_name": "Kak Potion Shop Front",
         "scene": "Kak Potion Shop",
         "locations": {
-            "Kak Potion Shop Item 1": "is_adult",
-            "Kak Potion Shop Item 2": "is_adult",
-            "Kak Potion Shop Item 3": "is_adult",
-            "Kak Potion Shop Item 4": "is_adult",
-            "Kak Potion Shop Item 5": "is_adult",
-            "Kak Potion Shop Item 6": "is_adult",
-            "Kak Potion Shop Item 7": "is_adult",
-            "Kak Potion Shop Item 8": "is_adult"
+            "Kak Potion Shop Left Side Bottom Left": "is_adult",
+            "Kak Potion Shop Right Side Bottom Right": "is_adult",
+            "Kak Potion Shop Left Side Top Left": "is_adult",
+            "Kak Potion Shop Left Side Top Right": "is_adult",
+            "Kak Potion Shop Right Side Top Left": "is_adult",
+            "Kak Potion Shop Right Side Bottom Left": "is_adult",
+            "Kak Potion Shop Right Side Top Right": "is_adult",
+            "Kak Potion Shop Left Side Bottom Right": "is_adult"
         },
         "exits": {
             "Kakariko Village": "True",

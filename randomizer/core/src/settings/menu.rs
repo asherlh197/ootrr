@@ -134,7 +134,7 @@ const RAINBOW_BRIDGE: View = View {
         yes("Vanilla", "vanilla"),
         broken("Always open", "open"),
         broken("Stones", "stones"),
-        broken("Medallions", "medallions"),
+        yes("Medallions", "medallions"),
         yes("Dungeon rewards", "dungeons"),
         missing("Dungeons"),
         broken("Tokens", "tokens"),
@@ -146,7 +146,7 @@ const RAINBOW_BRIDGE: View = View {
 const GANON_BK: View = View {
     id: "shuffle_ganon_bosskey",
     label: "Ganon's Boss Key",
-    tip: "Vanilla - Ganon's Boss Key will appear in the vanilla location.\n\nOwn dungeon - Ganon's Boss Key can appear anywhere inside Ganon's Castle.\n\nStart with - Places Ganon's Boss Key in your starting inventory.\n\nAny dungeon - Ganon's Boss Key can only appear inside of any dungeon.\n\nOverworld - Ganon's Boss Key can only appear outside of dungeons.\n\nAnywhere - Ganon's Boss Key can appear anywhere in the world.\n\nTrigger - These settings put the boss key on a trigger, granting the key once the requirements are met:\n- Stones: Obtain the specified amount of Spiritual Stones.\n- Medallions: Obtain the specified amount of medallions.\n- Dungeon rewards: Obtain the specified total sum of Spiritual Stones or medallions.\n- Dungeons: Complete the specified amount of dungeons. Dungeons are considered complete after stepping into the blue warp after the boss.\n- Tokens: Obtain the specified amount of Skulltula tokens.\n- Triforce Pieces: Obtain the specified amount of Triforce Pieces.\n\nLACS - Dungeon Rewards - Zelda gives Ganon's Boss Key in the Light Arrows Cutscene, which plays once you hold the set number of Stones and Medallions together. The Light Arrows are shuffled into the item pool. Experimental, untested in the game.\n\nSame Region - Ganon's Boss Key can only appear in Ganon's Castle or a nearby area.",
+    tip: "Vanilla - Ganon's Boss Key will appear in the vanilla location.\n\nOwn dungeon - Ganon's Boss Key can appear anywhere inside Ganon's Castle.\n\nStart with - Places Ganon's Boss Key in your starting inventory.\n\nAny dungeon - Ganon's Boss Key can only appear inside of any dungeon.\n\nOverworld - Ganon's Boss Key can only appear outside of dungeons.\n\nAnywhere - Ganon's Boss Key can appear anywhere in the world.\n\nTrigger - These settings put the boss key on a trigger, granting the key once the requirements are met:\n- Stones: Obtain the specified amount of Spiritual Stones.\n- Medallions: Obtain the specified amount of medallions.\n- Dungeon rewards: Obtain the specified total sum of Spiritual Stones or medallions.\n- Dungeons: Complete the specified amount of dungeons. Dungeons are considered complete after stepping into the blue warp after the boss.\n- Tokens: Obtain the specified amount of Skulltula tokens.\n- Triforce Pieces: Obtain the specified amount of Triforce Pieces.\n\nLACS - Dungeon Rewards - Zelda gives Ganon's Boss Key in the Light Arrows Cutscene, which plays once you hold the set number of Stones and Medallions together. The Light Arrows are shuffled into the item pool. Experimental, untested in the game.\n\nLACS - Medallions - Zelda gives Ganon's Boss Key in the Light Arrows Cutscene, which plays once you hold the set number of Medallions. The Light Arrows are shuffled into the item pool. Experimental, untested in the game.\n\nSame Region - Ganon's Boss Key can only appear in Ganon's Castle or a nearby area.",
     kind: Kind::Pick,
     opts: &[
         yes("Vanilla", "vanilla"),
@@ -156,6 +156,7 @@ const GANON_BK: View = View {
         yes("Overworld", "overworld"),
         yes("Anywhere", "keysanity"),
         yes("LACS - Dungeon Rewards", "lacs_dungeons"),
+        yes("LACS - Medallions", "lacs_medallions"),
         broken("Trigger-Stones", "stones"),
         broken("Trigger-Medallions", "medallions"),
         broken("Trigger-Rewards", "dungeons"),
@@ -391,6 +392,7 @@ const LOGIC: PortSection = port(
                     Entry::Hidden("bombchus_in_logic"),
                     Entry::Plain("nocturne_trigger"),
                     Entry::Plain("prelude_trigger"),
+                    Entry::Plain("night_skulls_suns_song"),
                 ],
             );
 
@@ -415,6 +417,7 @@ const WIN_CONDITION: PortSection = port(
                     ),
                     Entry::View(&GANON_BK),
                     Entry::Plain("lacs_rewards"),
+                    Entry::Plain("lacs_medallions"),
                     Entry::Hidden("ganon_bosskey_stones"),
                     Entry::Hidden("ganon_bosskey_medallions"),
                     Entry::Hidden("ganon_bosskey_rewards"),
@@ -463,8 +466,8 @@ const AREA_ACCESS: PortSection = port(
                     Entry::View(&GV_BRIDGE),
                     Entry::View(&RAINBOW_BRIDGE),
                     Entry::Plain("bridge_rewards"),
+                    Entry::Plain("bridge_medallions"),
                     Entry::Hidden("bridge_stones"),
-                    Entry::Hidden("bridge_medallions"),
                     Entry::Hidden("bridge_tokens"),
                     Entry::Hidden("bridge_hearts"),
                     Entry::View(&TRIALS),
@@ -772,8 +775,8 @@ pub const MENU: &[Page] = &[
         heading: GAMEPLAY,
         sections: &[
             sec("Cutscenes", &["skip_intro", "skip_cutscenes", "skip_story_scenes", "faster_chests", "skip_first_pickup_text", "skip_area_intros"]),
-            sec("Side quests", &["skip_mask_quest", "anju_one_cucco", "skulls_by_day"]),
-            sec("Dungeons", &["deku_bridge_safe"]),
+            sec("Side quests", &["skip_mask_quest", "anju_one_cucco", "skulls_by_day", "free_scarecrow"]),
+            sec("Dungeons", &["deku_bridge_safe", "skip_tower_escape"]),
             sec("Travel", &["owl_warps"]),
             sec("Puzzles", &["faster_blocks"]),
         ],
@@ -796,6 +799,14 @@ pub const MENU: &[Page] = &[
             sec("Drops and healing", &["no_heart_drops", "no_ammo_drops", "no_gossip_fairies", "no_bottles_in_combat", "no_dupe_items", "fairy_helps_enemies"]),
             sec("Boss fights", &["boss_minibosses", "boss_minions"]),
             sec("Minigames", &["unbreakable_bowling_grass", "harder_talon_cuccos"]),
+        ],
+    },
+    Page {
+        id: "qol_bundle",
+        label: "Time savers",
+        heading: IN_DEV,
+        sections: &[
+            sec("Gold Skulltulas", &["night_skulls_suns_song"]),
         ],
     },
     Page { id: "cosmetics", label: "Cosmetics", heading: GAMEPLAY, sections: &[sec("Looks", &["mega_like_likes"])] },

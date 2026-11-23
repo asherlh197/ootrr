@@ -558,6 +558,7 @@ mod tests {
     fn plan_of(pairs: &[(&str, Value)]) -> crate::slice::support::Plan {
         let mut s: Settings = Settings::default();
         s.set(TIME, Value::Bool(false)).unwrap();
+        s.set("shuffle_smallkeys", Value::s("vanilla")).unwrap();
         for (k, v) in pairs {
             s.set(k, v.clone()).unwrap();
         }
@@ -725,7 +726,7 @@ mod tests {
         for k in 0..3 {
             let g = crate::slice::generate::generate_data(&d, &s, &format!("beans {k}"), &crate::slice::GenOpts::default()).unwrap();
             let it: &str = &g.seed_file.placements[skips::BEAN_SALESMAN];
-            assert!(crate::flow_extra::pouch(d.item(it).unwrap()), "{it}");
+            assert!(d.item(it).is_some_and(|i| i.actor.is_some()), "{it}");
             assert!(g.seed_file.placements.values().all(|v| !skips::BEAN_ITEMS.contains(&v.as_str())), "seed {k}");
         }
     }

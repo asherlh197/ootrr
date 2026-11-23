@@ -125,6 +125,8 @@ pub(crate) fn tables(rf: &mut Romfs, o: &Opts, modded: bool, s: &Spec, l: &Layer
             if let Some(elink) = l.pouch_from.as_deref() {
                 r.set("ELinkUserName", Node::Str(elink.to_string()));
             }
+        } else if l.own {
+            r.set(rows::ACTOR_NAME, Node::Str(s.name.clone()));
         }
         at[0] = rows::insert(y, r)?;
         Ok(())
@@ -143,7 +145,9 @@ pub(crate) fn tables(rf: &mut Romfs, o: &Opts, modded: bool, s: &Spec, l: &Layer
     let q: File = table(rf, o, modded, POUCH_INFO, |y: &mut Byml| {
         let pouch_source: &str = l.pouch_from.as_deref().unwrap_or(source);
         let mut r: Node = rows::pouch_row(rows::need(y, pouch_source, POUCH_INFO)?, &s.name);
-        if s.name.starts_with(crate::slice::key_spots::DUNGEON_PREFIX) {
+        if l.own {
+            rows::quiet(&mut r);
+        } else if s.name.starts_with(crate::slice::key_spots::DUNGEON_PREFIX) {
             r.remove("PouchSpecialDeal");
             r.set("PouchStockable", Node::Bool(true));
         }
@@ -478,7 +482,6 @@ pub fn run_with(romfs: &P, load: &P, mod_name: &str, s: &Spec, o: &Opts, l: &Lay
     let mut seen: BS<&str> = BS::new();
     for n in [BASE, DONOR, source]
         .into_iter()
-        .chain(l.model.as_deref())
         .chain(l.pouch_from.as_deref())
         // An event-form ring inherits the event-object actor, so its parent pack must be in the
         // pool to close the component chain. A drop-form ring inherits the world pickup base,
@@ -487,6 +490,14 @@ pub fn run_with(romfs: &P, load: &P, mod_name: &str, s: &Spec, o: &Opts, l: &Lay
     {
         if seen.insert(n) {
             packs.push(sarc::parse(&start(&mut rf, o.base.as_ref(), &pack_of(n))?)?);
+        }
+    }
+    // The model donor lends only its parameter files, so a donor's AI graph never reaches the
+    // pickup and the template does not refuse a binary file in its pool.
+    if let Some(m) = l.model.as_deref() {
+        if seen.insert(m) {
+            let es: Vec<Entry> = sarc::parse(&start(&mut rf, o.base.as_ref(), &pack_of(m))?)?;
+            packs.push(es.into_iter().filter(|e| crate::pickup_pack::closure::is_byml(&e.data)).collect());
         }
     }
     let mut extra: Vec<(String, Vec<u8>)> = Vec::new();

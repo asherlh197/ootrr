@@ -219,7 +219,8 @@ pub(crate) fn targets_with(d: &Data, seed: &SeedFile, roam: bool, fixed: &BM<Str
             if new.actor.is_none() {
                 return Err(E::Msg(format!("{item} has no remake item actor and cannot be placed")));
             }
-            let new_actor: String = given.get(loc).cloned().ok_or_else(|| E::Msg(format!("{loc} was given no item actor")))?;
+            // An upgrade drops the tier slice::tier_order fixed at this heart, as an uncovered chest does.
+            let new_actor: String = fixed.get(loc).or_else(|| given.get(loc)).cloned().ok_or_else(|| E::Msg(format!("{loc} was given no item actor")))?;
             if new_actor == l.item {
                 same += 1;
                 continue;
@@ -265,7 +266,9 @@ pub(crate) fn targets_with(d: &Data, seed: &SeedFile, roam: bool, fixed: &BM<Str
         }
         let family: Option<&'static str> = d
             .family(item)
-            .filter(|f| !needs_every_holder(f) || d.holders(f).iter().all(|h| seed.placements.contains_key(*h) || d.wrappable(h)));
+            .filter(|f| !needs_every_holder(f) || d.holders(f).iter().all(|h| seed.placements.contains_key(*h) || d.wrappable(h)))
+            // The Treasure Chest Game reward keeps its clear event, so it drops its fixed tier.
+            .filter(|_| loc != crate::slice::treasure::LOC);
         let new_actor: String = if hideout && new.kind == "HideoutSmallKey" {
             new.actor.clone().ok_or_else(|| E::Msg(format!("{item} has no key actor")))?
         } else {

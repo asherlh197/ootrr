@@ -68,15 +68,16 @@ pub struct Layers {
     /// With spin: how far, in millimetres, the pickup's body reaches below its origin so that the
     /// turning item model clears the ground (crate::pickup_pack::lift). The pack builds fill it in.
     pub lift: u32,
+    pub own: bool,
 }
 
 impl Layers {
     pub fn plain(&self) -> bool {
-        self.tags.is_empty() && !self.ammo && !self.magic && self.model.is_none() && self.pouch_from.is_none() && self.ring.is_none() && !self.drop_ring && !self.spin
+        self.tags.is_empty() && !self.ammo && !self.magic && self.model.is_none() && self.pouch_from.is_none() && self.ring.is_none() && !self.drop_ring && !self.spin && !self.own
     }
 
     pub fn kit_ok(&self) -> bool {
-        self.tags.is_empty() && !self.ammo && !self.magic
+        self.tags.is_empty() && !self.ammo && !self.magic && !self.own
     }
 }
 
@@ -121,6 +122,8 @@ mod tests {
         assert!(!Layers { ammo: true, ..Layers::default() }.plain());
         assert!(!Layers { magic: true, ..Layers::default() }.plain());
         assert!(!Layers { spin: true, ..Layers::default() }.plain());
+        assert!(!Layers { own: true, ..Layers::default() }.plain());
+        assert!(!Layers { own: true, ..Layers::default() }.kit_ok());
         assert!(!Layers { tags: vec!["LetterBottle".to_string()], ..Layers::default() }.plain());
     }
 }

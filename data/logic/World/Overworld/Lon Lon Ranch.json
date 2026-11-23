@@ -24,8 +24,8 @@
             "LLR Epona Hurdle Wonderitem 2": "can_ride_epona",
             "LLR GS Tree": "is_child and can_bonk",
             "LLR GS Rain Shed": "is_child and can_bonk",
-            "LLR GS House Window": "can_use(Boomerang) and (at_night or gold_skulls_ignore_daytime)",
-            "LLR GS Back Wall": "can_use(Boomerang) and (at_night or gold_skulls_ignore_daytime)"
+            "LLR GS House Window": "can_use(Boomerang) and can_get_night_gs",
+            "LLR GS Back Wall": "can_use(Boomerang) and can_get_night_gs"
         },
         "exits": {
             "Hyrule Field": "True",

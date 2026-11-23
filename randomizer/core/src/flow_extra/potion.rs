@@ -10,7 +10,11 @@ pub const BOTTLE: &str = "Market Potion Shop Free Bottle";
 pub const POTION: &str = "Market Potion Shop Red Potion";
 pub const LOCS: [&str; 2] = [BOTTLE, POTION];
 pub const RULE: &str = "'Zelda Met' and has_bottle";
-pub const SHELF: &str = "Market Potion Shop Item ";
+pub const SHELF: &str = "Market Potion Shop ";
+
+pub fn shelf(name: &str) -> bool {
+    name.strip_prefix(SHELF).is_some_and(|r| r.starts_with("Left Side ") || r.starts_with("Right Side "))
+}
 pub const NEED: &str = "has_bottle";
 
 pub const NOTE: &str = "The Market Potion Shop keeper's free bottle and his Red Potion for the escaped bug are shuffled. A child who has met Zelda gets both by day. While the free bottle holds another item he only starts the bug tutorial for a child who already carries an empty bottle, and the shop shelves open after the tutorial as before, so the logic asks for a bottle for both checks and for the shelves.";
@@ -44,7 +48,7 @@ fn shelves(files: &mut [Lj]) -> Res<usize> {
                 return Err(E::Msg(format!("potion shop: {REGION} has no locations")));
             };
             for (name, rule) in list.iter_mut() {
-                if !name.starts_with(SHELF) {
+                if !shelf(name) {
                     continue;
                 }
                 let Lj::Str(old) = rule else {
@@ -273,10 +277,11 @@ mod tests {
         let dry: Search = explore(&w, &without(&w, &d, &bottles), &[]);
         let plain: Search = explore(&off, &without(&off, &d, &bottles), &[]);
         let mut shown: usize = 0;
-        for n in LOCS.iter().map(|s| s.to_string()).chain((1..=8).map(|i| format!("{SHELF}{i}"))) {
+        let sides = ["Left Side", "Right Side"].iter().flat_map(|s| ["Top Left", "Top Right", "Bottom Left", "Bottom Right"].iter().map(move |p| format!("{SHELF}{s} {p}")));
+        for n in LOCS.iter().map(|s| s.to_string()).chain(sides) {
             assert!(seen(&all, &w, &n), "{n}");
             assert!(!seen(&dry, &w, &n), "{n}");
-            if n.starts_with(SHELF) && seen(&plain, &off, &n) {
+            if shelf(&n) && seen(&plain, &off, &n) {
                 shown += 1;
             }
         }

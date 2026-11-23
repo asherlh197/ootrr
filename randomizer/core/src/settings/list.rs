@@ -90,7 +90,8 @@ fn ganon_key() -> Vec<Setting> {
         Setting::choice(18, "shuffle_ganon_bosskey", "keys", "Ganon's Boss Key", "dungeon")
             .tag(Tag::Core)
             .tip("Where Ganon's Castle Boss Key is, or what earns it.")
-            .opt(crate::lacs_key::VALUE, "LACS - Dungeon Rewards", "Zelda gives the key in the Light Arrows Cutscene, which plays once you hold a set number of Stones and Medallions together. The Light Arrows are shuffled into the item pool. Experimental, untested in the game."),
+            .opt(crate::lacs_key::VALUE, "LACS - Dungeon Rewards", "Zelda gives the key in the Light Arrows Cutscene, which plays once you hold a set number of Stones and Medallions together. The Light Arrows are shuffled into the item pool. Experimental, untested in the game.")
+            .opt(crate::medal_gate::LACS_MEDALLIONS_VALUE, "LACS - Medallions", "Zelda gives the key in the Light Arrows Cutscene, which plays once you hold a set number of Medallions. The Light Arrows are shuffled into the item pool. Experimental, untested in the game."),
     ));
     vec![
         k,
@@ -170,6 +171,7 @@ fn starting_items() -> Setting {
             ("three_bottles", "Three Empty Bottles"),
             ("four_bottles", "Four Empty Bottles"),
             ("hylian_shield", "Hylian Shield"),
+            ("bunny_hood", "Bunny Hood"),
         ])
 }
 
@@ -444,6 +446,7 @@ pub fn build() -> Schema {
     s.extend(ganon_key());
     s.extend(bridge());
     s.extend(crate::medal_gate::settings());
+    s.extend(crate::qol::settings());
     s.extend(crate::door_gate::settings());
     s.extend(crate::nocturne_gate::settings());
     s.extend(crate::prelude_gate::settings());
@@ -724,7 +727,7 @@ pub fn build() -> Schema {
     );
     s.push(
         Setting::toggle(73, "shuffle_treasure_reward", "shuffle", "Treasure Chest Game reward", false)
-            .tip("Whether the final reward of the Market Treasure Chest Game, a Piece of Heart, holds a random item. Only the first win gives it, later wins give the usual red rupee. The five rooms keep their keys and rupees. Only unique items that do nothing when found twice can be placed there, so no upgrades, ammo, bottles or keys."),
+            .tip("Whether the final reward of the Market Treasure Chest Game, a Piece of Heart, holds a random item. Only the first win gives it, later wins give the usual red rupee. The five rooms keep their keys and rupees. Any item can be placed there; an upgrade gives the tier the spoiler names."),
     );
     s.extend(crate::shops::plan::settings());
     s.push(

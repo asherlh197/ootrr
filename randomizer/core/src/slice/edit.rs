@@ -124,6 +124,7 @@ pub fn start_state(d: &Data, seed: &SeedFile, p: &crate::slice::support::Plan) -
     if p.story {
         ops.extend(crate::story_skip::start());
     }
+    ops.extend(crate::key_log::start_ops());
     let seen: crate::start_state::Ops = crate::start_state::visits(&ops);
     ops.extend(seen);
     Ok(ops)
@@ -199,17 +200,16 @@ pub fn build_with(seed: &SeedFile, romfs: &P, load: &P, mod_name: &str, host: Ho
     let silver: BM<u64, &'static str> = crate::slice::silver::grants(&d, seed)?;
     let mut passes: crate::slice::map_passes::State = crate::slice::map_passes::State::new(&silver, &gr, &skull_drops);
     passes.day = p.day_skulls;
+    passes.qol = p.qol;
     let mut edits: Vec<Edited> = Vec::new();
     let size_ctx: crate::chest_size::Ctx = crate::chest_size::Ctx { chus: p.chus, owned: p.start.owned.clone() };
     let sizes: BM<u64, crate::chest_size::Want> = if p.chest_sizes { crate::chest_size::wanted(&d, seed, &size_ctx, crate::slice::dungeon_items::credited(p.keys.map)) } else { BM::new() };
     let small_hearts: BS<u64> = if p.chest_sizes { crate::chest_size::small_hearts(&d, seed, &size_ctx, crate::slice::dungeon_items::credited(p.keys.map)) } else { BS::new() };
     let moves: crate::chest_size::Moves = if sizes.is_empty() { crate::chest_size::Moves::default() } else { crate::chest_size::moves(&crate::chest_size::scan(&mut rf, &sizes)?, &sizes) };
     let mut resized_n: usize = 0;
-    // Freestanding spots swapped to a seed pickup stand higher, so the turning item model clears
-    // the ground (crate::pickup_pack::lift).
-    let lifts: BM<String, f32> = {
+    let lifts: BM<String, (f32, f32)> = {
         let info: crate::byml::Byml = rf.read_byml(crate::pickup_pack::rows::ACTOR_INFO)?;
-        ts.iter().filter(|t| extra.has(&t.new_actor)).filter_map(|t| crate::pickup_pack::lift::for_pack(&info, &t.new_actor).map(|dy| (t.new_actor.clone(), dy))).collect()
+        ts.iter().filter(|t| extra.has(&t.new_actor)).filter_map(|t| crate::pickup_pack::lift::look_for_pack(&info, &t.new_actor).map(|l| (t.new_actor.clone(), l))).collect()
     };
     for f in banc_files(&rf)? {
         let vanilla: Vec<u8> = rf.read_zs(&f)?;
@@ -217,6 +217,13 @@ pub fn build_with(seed: &SeedFile, romfs: &P, load: &P, mod_name: &str, host: Ho
             resized_n += n;
             b
         });
+        let resized: Option<Vec<u8>> = if seed.placements.contains_key(crate::flow_extra::sun::LOC) && f == crate::flow_extra::sun::MAP {
+            Some(crate::flow_extra::sun::hide(resized.as_deref().unwrap_or(&vanilla))?)
+        } else if p.qol.one_race && f == crate::qol::dampe_race::GRAVE {
+            Some(crate::qol::dampe_race::place(resized.as_deref().unwrap_or(&vanilla))?)
+        } else {
+            resized
+        };
         let raw: &[u8] = resized.as_deref().unwrap_or(&vanilla);
         let e: Option<Edited> = edit_file_with(&f, raw, &ts, roam || p.rings || hideout_ring, &small_hearts, &lifts, &wrapped_chests)?;
         let e: Option<Edited> = match (e, &resized) {
@@ -259,6 +266,8 @@ pub fn build_with(seed: &SeedFile, romfs: &P, load: &P, mod_name: &str, host: Ho
             }
         }
     }
+    // Spots that exist once per age share one actor hash, so their item is taken once.
+    crate::slice::copies::share(&mut rf, &d, &seed.placements, &mut edits)?;
     let pk: Pack = Pack::begin_for(load, TITLE_ID, mod_name, host)?;
     let mut rst: Option<Rst> = None;
     let mut grown: usize = 0;
@@ -400,7 +409,10 @@ pub fn build_with(seed: &SeedFile, romfs: &P, load: &P, mod_name: &str, host: Ho
     };
     crate::slice::stages::run(&mut rf, &c, &mut more)?;
     // Ground spots whose actor kept no saved row get one when another pickup stands there.
-    let fresh: Vec<u64> = ts.iter().filter(|t| !t.heart_chest && crate::slice::pickups::needs_row(&t.name) && t.new_actor != t.old_actor).map(|t| t.hash).collect();
+    let mut fresh: Vec<u64> = ts.iter().filter(|t| !t.heart_chest && crate::slice::pickups::needs_row(&t.name) && t.new_actor != t.old_actor).map(|t| t.hash).collect();
+    if p.qol.one_race && !fresh.contains(&crate::qol::dampe_race::HEART) {
+        fresh.push(crate::qol::dampe_race::HEART);
+    }
     crate::pot_slice::rows::stage_new(&mut rf, &mut more, &fresh)?;
     for o in more {
         pk.write_romfs(&o.path, &o.z)?;
@@ -447,6 +459,7 @@ pub fn build_with(seed: &SeedFile, romfs: &P, load: &P, mod_name: &str, host: Ho
         if p.gates.kakariko {
             outs.push(crate::start_state::stage_free_quest(&mut rf)?);
         }
+        crate::key_log::stage_table(&mut rf, &mut outs)?;
         if clock {
             outs.push(crate::start_state::stage_field_clock(&mut rf)?);
         }
@@ -521,8 +534,39 @@ pub fn build_with(seed: &SeedFile, romfs: &P, load: &P, mod_name: &str, host: Ho
     if p.rainbow.is_some() {
         crate::story_skip::stage_late(&mut rf, &mut late, &work, "AllSage", crate::rainbow_bridge::patch_lacs_step)?;
     }
+    if p.qol.any_fish {
+        crate::story_skip::stage_late(&mut rf, &mut late, &work, crate::qol::fishing::FLOW, crate::qol::fishing::patch)?;
+    }
+    crate::story_skip::stage_late(&mut rf, &mut late, &work, "DisplayShop", |b| {
+        let f = b.flows.first_mut().ok_or(crate::error::Error::Format("child tunics: DisplayShop holds no flow"))?;
+        crate::shelf::hook::child_tunics(f).map(|_| ())
+    })?;
+    if ts.iter().any(|t| t.name == crate::slice::pickups::JAR_SPOT && t.new_actor != t.old_actor) {
+        crate::story_skip::stage_late(&mut rf, &mut late, &work, crate::slice::pickups::JAR_FLOW, crate::slice::pickups::jar_patch)?;
+    }
+    if seed.placements.contains_key(crate::flow_extra::sun::LOC) {
+        crate::story_skip::stage_sun_give(&mut rf, &mut late, &work, &give_for(crate::flow_extra::sun::LOC))?;
+    }
+    if p.qol.free_scarecrow {
+        crate::story_skip::stage_late(&mut rf, &mut late, &work, crate::qol::scarecrow::FLOW, crate::qol::scarecrow::patch_flow)?;
+    }
+    if p.qol.first_dig {
+        for flow in crate::qol::dampe_dig::FLOWS {
+            crate::story_skip::stage_late(&mut rf, &mut late, &work, flow, crate::qol::dampe_dig::patch)?;
+        }
+    }
+    if p.qol.one_race {
+        crate::story_skip::stage_late(&mut rf, &mut late, &work, crate::qol::dampe_race::FLOW, crate::qol::dampe_race::patch)?;
+    }
+    if p.qol.fast_session {
+        crate::story_skip::stage_late(&mut rf, &mut late, &work, crate::qol::skull_kid_session::FLOW, crate::qol::skull_kid_session::patch)?;
+    }
+    if p.qol.skip_escape {
+        crate::story_skip::stage_late(&mut rf, &mut late, &work, crate::qol::tower_escape::FLOW, crate::qol::tower_escape::patch_flow)?;
+    }
     // A Bow or Slingshot from any gift or pickup brings its starting bag, as a chest's does.
     crate::starter_bags::stage(&mut rf, &mut late, &work)?;
+    crate::dungeon_packs::stage(&mut rf, &mut late, &work, &crate::dungeon_packs::picked_up(&d, seed))?;
     // Rooms that could lock Link in once their item is shuffled away (crate::dungeon_fixes).
     crate::dungeon_fixes::stage(&mut rf, &mut late, &work)?;
     // World pickups call a separate, ring-checked ActionGuide entry after the pouch add, so the
@@ -534,6 +578,7 @@ pub fn build_with(seed: &SeedFile, romfs: &P, load: &P, mod_name: &str, host: Ho
         crate::short_get::stage(&mut rf, &mut late, &work)?;
     }
     crate::entr::story::stage(&mut rf, seed, &mut late, &work)?;
+    crate::key_log::stage_flows(&mut rf, &mut late, &work)?;
     crate::open_world::stage_last(&mut rf, &mut late, &work)?;
     let mut debug_missed: Vec<String> = Vec::new();
     let mut paths: BS<&str> = BS::new();
@@ -936,6 +981,7 @@ mod tests {
         let d: Data = Data::load().unwrap();
         let mut s: Settings = Settings::default();
         s.set("shuffle_rewards", crate::settings::Value::s("off")).unwrap();
+        s.set("shuffle_smallkeys", crate::settings::Value::s("vanilla")).unwrap();
         for n in 0..3 {
             let g = generate_data(&d, &s, &format!("tiers {n}"), &GenOpts::default()).unwrap();
             let given: BM<String, String> = actors_for(&d, &g.seed_file).unwrap();
@@ -1021,7 +1067,7 @@ mod tests {
         assert!(!flows.is_empty());
         for c in &flows {
             // Reward events hand out any item a chest gives, through its chest content actor (#24).
-            let allowed: bool = g.seed_file.placements.get(&c.location).and_then(|it| d.item(it)).is_some_and(|i| crate::slice::flow_rules::allows(&d, &c.location, i));
+            let allowed: bool = g.seed_file.placements.get(&c.location).and_then(|it| d.item(it)).is_some_and(|i| crate::slice::flow_rules::allows(&d, &c.location, i) || crate::slice::flow_rules::linked(i, &c.item));
             assert!(d.flow.usable(&c.item) || crate::slice::flow_rules::ANY_POUCH.contains(&c.location.as_str()) || crate::ocarina_hold::is_form(&c.item) || allowed, "{} -> {}", c.location, c.item);
             assert!(d.flow_ok(&c.location), "{}", c.location);
         }
@@ -1057,7 +1103,7 @@ mod tests {
                 crate::flow_locations::plan(&d.flow, &flows, &FlowOpts { songs, untested: true }).unwrap_or_else(|e| panic!("seed split {n}: {e}"));
             for c in &flows {
                 // Reward events hand out any item a chest gives, through its chest content actor (#24).
-                let allowed: bool = g.seed_file.placements.get(&c.location).and_then(|it| d.item(it)).is_some_and(|i| crate::slice::flow_rules::allows(&d, &c.location, i));
+                let allowed: bool = g.seed_file.placements.get(&c.location).and_then(|it| d.item(it)).is_some_and(|i| crate::slice::flow_rules::allows(&d, &c.location, i) || crate::slice::flow_rules::linked(i, &c.item));
                 let known: bool = d.flow.usable(&c.item) || crate::slice::flow_rules::ANY_POUCH.contains(&c.location.as_str()) || crate::ocarina_hold::is_form(&c.item) || allowed;
                 assert!(known || untested.contains(&c.item), "{} -> {}", c.location, c.item);
             }

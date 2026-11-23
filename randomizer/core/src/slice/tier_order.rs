@@ -66,6 +66,8 @@ pub fn fixed_spot(d: &Data, loc: &str) -> bool {
         || crate::shops::is_loc(loc)
         || crate::slice::skulls::is_skull(d, loc)
         || crate::hideout_keys::is_native(loc)
+        // The Treasure Chest Game reward keeps its clear event, so it drops one fixed tier.
+        || loc == crate::slice::treasure::LOC
         || d.cat.by_name(loc).is_some_and(|l| crate::slice::pickups::is_world(l) || l.kind == "bossheart")
 }
 
@@ -410,18 +412,18 @@ mod tests {
         // Every upgrade family sells on a shelf, tier by tier (shelf::hook), so the reach order fixes
         // no tier there, however early another copy is found.
         assert_eq!(crate::shops::jobs::tiered_family(&d, "Slingshot"), Some("Slingshot"));
-        let (w, mut place): (World, Placement) = lone_slingshot(&d, &s, "KF Shop Item 1");
-        let placed: BM<String, String> = map(&[("KF Shop Item 1", "Slingshot"), ("Deku Tree Slingshot Chest", "Rupees (5)")]);
-        assert_eq!(give(&slots(&d, &placed), "KF Shop Item 1"), Some(Give::Flow));
+        let (w, mut place): (World, Placement) = lone_slingshot(&d, &s, "KF Shop Right Side Bottom Left");
+        let placed: BM<String, String> = map(&[("KF Shop Right Side Bottom Left", "Slingshot"), ("Deku Tree Slingshot Chest", "Rupees (5)")]);
+        assert_eq!(give(&slots(&d, &placed), "KF Shop Right Side Bottom Left"), Some(Give::Flow));
         let v: Verdict = judge(&d, &w, &place, &placed).unwrap();
-        assert!(!v.assign.contains_key("KF Shop Item 1"), "{:?}", v.assign);
-        assert!(!v.bad.iter().any(|b| b.starts_with("KF Shop Item 1")), "{:?}", v.bad);
+        assert!(!v.assign.contains_key("KF Shop Right Side Bottom Left"), "{:?}", v.assign);
+        assert!(!v.bad.iter().any(|b| b.starts_with("KF Shop Right Side Bottom Left")), "{:?}", v.bad);
         place.put(w.loc("KF Midos Top Left Chest").unwrap(), w.item("Slingshot").unwrap());
-        let early: BM<String, String> = map(&[("KF Shop Item 1", "Slingshot"), ("KF Midos Top Left Chest", "Slingshot"), ("Deku Tree Slingshot Chest", "Rupees (5)")]);
-        assert_eq!(give(&slots(&d, &early), "KF Shop Item 1"), Some(Give::Flow));
+        let early: BM<String, String> = map(&[("KF Shop Right Side Bottom Left", "Slingshot"), ("KF Midos Top Left Chest", "Slingshot"), ("Deku Tree Slingshot Chest", "Rupees (5)")]);
+        assert_eq!(give(&slots(&d, &early), "KF Shop Right Side Bottom Left"), Some(Give::Flow));
         let v: Verdict = judge(&d, &w, &place, &early).unwrap();
-        assert!(!v.assign.contains_key("KF Shop Item 1"), "{:?}", v.assign);
-        assert!(!v.bad.iter().any(|b| b.starts_with("KF Shop Item 1")), "{:?}", v.bad);
+        assert!(!v.assign.contains_key("KF Shop Right Side Bottom Left"), "{:?}", v.assign);
+        assert!(!v.bad.iter().any(|b| b.starts_with("KF Shop Right Side Bottom Left")), "{:?}", v.bad);
     }
 
     #[test]

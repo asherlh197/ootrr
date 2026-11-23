@@ -16,19 +16,16 @@ use crate::world::{LocId, World};
 
 pub const SETTING: &str = "shuffle_freestanding_items";
 
-pub const HELD: [(&str, bool); 3] = [
+pub const HELD: [(&str, bool); 2] = [
     ("HF Tektite Grotto Freestanding PoH", false),
     ("GV Crate Freestanding PoH", false),
-    ("Graveyard Dampe Race Freestanding PoH", true),
 ];
 
-pub const PIECES_NOTE: &str = "Freestanding heart pieces are shuffled. Heart pieces on the ground swap their actor for another world pickup, and three heart piece chests join the chest pool. Rupees and recovery hearts on the ground keep their items. Rupees, heart pieces, the two shields, the other world pickups the game ships except the Gold Skulltula Token and Fire Arrows, and every item with a built pickup pack can lie on the ground.";
+pub const PIECES_NOTE: &str = "Freestanding heart pieces and Ruto's Letter are shuffled. Heart pieces on the ground swap their actor for another world pickup, and two heart piece chests join the chest pool. Rupees and recovery hearts on the ground keep their items. Rupees, heart pieces, the two shields, the other world pickups the game ships except the Gold Skulltula Token and Fire Arrows, and every item with a built pickup pack can lie on the ground.";
 
-pub const NOTE: &str = "Freestanding items are shuffled. Heart pieces, rupees and recovery hearts on the ground swap their actor for another world pickup, and three heart piece chests join the chest pool. Rupees, recovery hearts, heart pieces, the two shields, the other world pickups the game ships except the Gold Skulltula Token and Fire Arrows, and every item with a built pickup pack can lie on the ground.";
+pub const NOTE: &str = "Freestanding items are shuffled. Heart pieces, rupees and recovery hearts on the ground swap their actor for another world pickup, and two heart piece chests join the chest pool. Rupees, recovery hearts, heart pieces, the two shields, the other world pickups the game ships except the Gold Skulltula Token and Fire Arrows, and every item with a built pickup pack can lie on the ground.";
 
 pub const WORLD_ONLY: [&str; 1] = ["Recovery Heart"];
-
-pub const UNSURE: [&str; 2] = ["HF Tektite Grotto Freestanding PoH", "GV Crate Freestanding PoH"];
 
 const ACTORS: [(&str, &str); 6] = [
     ("Piece of Heart", "Obj_Heart_Piece"),
@@ -52,15 +49,36 @@ pub fn ground_actor(item: &str) -> Option<&'static str> {
 /// Freestanding small keys that join the pool when small keys roam (keysanity: any dungeon,
 /// anywhere, overworld, regional). Own dungeon keeps them, as the new saved row
 /// (NEW_ROWS) is not yet checked in the game. The key credits the dungeon of its scene, so the spot takes its own key back
-/// unchanged, or any pickup that can lie on the ground. The Shadow Temple key stays out: its
 /// jar event (ShadowTemple_Gimmick, entry LargeJar_Key) binds the key actor by name and plays
-/// Act_Pop on it, which another pickup may not have. The Thieves' Hideout keys stay out too.
-pub const KEY_SPOTS: [&str; 1] = ["Bottom of the Well Freestanding Key"];
+pub const KEY_SPOTS: [&str; 2] = ["Bottom of the Well Freestanding Key", "Shadow Temple Freestanding Key"];
+
+pub const JAR_SPOT: &str = "Shadow Temple Freestanding Key";
+pub const JAR_FLOW: &str = "ShadowTemple_Gimmick";
+
+pub fn jar_patch(b: &mut crate::bfevfl::Bf) -> Res<()> {
+    use crate::bfevfl::{Cont, Kind, Val};
+    let f = b.flows.iter_mut().find(|f| f.name == JAR_FLOW).ok_or(E::Format("jar key: ShadowTemple_Gimmick has no flow of its name"))?;
+    let hits: Vec<usize> = (0..f.events.len()).filter(|&i| f.events[i].name == "Event116").collect();
+    let [pop] = hits.as_slice() else {
+        return Err(E::Msg(format!("jar key: expected one Event116 in {JAR_FLOW}, found {}", hits.len())));
+    };
+    let pop: usize = *pop;
+    let pops: bool = f.events[pop].kind.params().and_then(|c| c.get("ASName")) == Some(&Val::Str("Act_Pop".to_string()));
+    if !pops {
+        return Err(E::Format("jar key: Event116 no longer pops the key"));
+    }
+    let (a, act): (u16, u16) = crate::dungeon_credit::action_slot(f, "EventSystemActor", "EventWait")?;
+    let params: Cont = Cont { items: vec![("IsWaitEnd".to_string(), Val::Bool(1)), ("Frames".to_string(), Val::Int(1))] };
+    f.events[pop].kind = Kind::Action { next: crate::bfevfl::flow::NONE, actor: a, act, params: Some(params) };
+    Ok(())
+}
 
 /// Ground spots whose actor keeps no saved row of its own (Ruto's Letter checks the letter,
 /// the key its room flag). When another pickup stands there the build adds a permanent row for
 /// the hash (pot_slice::rows::stage_new), or that pickup would come back on every load.
-pub const NEW_ROWS: [&str; 2] = ["LH Underwater Item", "Bottom of the Well Freestanding Key"];
+pub const NEW_ROWS: [&str; 4] = ["LH Underwater Item", "Bottom of the Well Freestanding Key", "Graveyard Dampe Race Freestanding PoH", "Shadow Temple Freestanding Key"];
+
+pub const ALWAYS: [&str; 1] = ["LH Underwater Item"];
 
 pub fn is_key_spot(l: &Loc) -> bool {
     l.via == Via::Actor && l.kind == "key" && KEY_SPOTS.contains(&l.name.as_str())
@@ -92,10 +110,6 @@ pub fn listed(d: &Data, name: &str) -> bool {
     is_held(name) || d.cat.by_name(name).is_some_and(is_world)
 }
 
-pub fn keeps_out(d: &Data, name: &str, item: &str) -> bool {
-    UNSURE.contains(&name) && d.vanilla_of(name) != Some(item) && d.item(item).is_some_and(|i| i.adv)
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Free {
     Off,
@@ -123,7 +137,7 @@ impl Free {
     }
 
     fn covers(self, l: &Loc, dungeon: bool) -> bool {
-        let piece: bool = l.kind == "heart" || is_held(&l.name);
+        let piece: bool = l.kind == "heart" || is_held(&l.name) || ALWAYS.contains(&l.name.as_str());
         match self {
             Free::Off => false,
             Free::Pieces => piece,
@@ -180,6 +194,9 @@ pub fn swap_gyaml(y: &mut Byml, hash: u64, old: &str, new: &str) -> usize {
 
 pub fn pack_actor(d: &Data, extra: &Extra, item: &str, tier: Option<&str>) -> Option<String> {
     let i: &crate::slice::data::Item = d.item(item)?;
+    if let Some(p) = crate::dungeon_packs::of_item(i) {
+        return extra.has(&p.name()).then(|| p.name());
+    }
     let content: &str = match tier {
         Some(t) => t,
         None if i.tiers.is_empty() => i.actor.as_deref()?,
@@ -277,7 +294,8 @@ pub fn at(d: &Data, name: &str, item: &str) -> Option<bool> {
             return Some(true);
         }
         let known: bool = ground_actor(item).is_some() || ks::shield(item).is_some() || ks::placeable(d, item, ks::Spot::Free);
-        return Some(known && crate::slice::copies::fits(d, name, item));
+        // A spot that exists once per age shares one hash at build (crate::slice::copies::share).
+        return Some(known);
     }
     None
 }
@@ -520,13 +538,14 @@ mod tests {
     }
 
     #[test]
-    fn the_two_unsure_heart_chests_never_hold_progression_and_the_note_follows_the_pool() {
+    fn the_two_heart_chests_join_the_pool_and_the_note_follows_it() {
         let d: Data = Data::load().unwrap();
         for n in 0..4 {
             let g: Generated = generate_data(&d, &on("all"), &format!("unsure {n}"), &GenOpts::default()).unwrap();
-            for name in UNSURE {
-                let it: &str = &g.seed_file.placements[name];
-                assert!(d.vanilla_of(name) == Some(it) || !d.item(it).unwrap().adv, "{name} holds {it}");
+            // Their logic follows the actors (the Hyrule Field chest is adult only, the Gerudo
+            // Valley chest stands on the crate ledge), so they take any item.
+            for name in ["HF Tektite Grotto Freestanding PoH", "GV Crate Freestanding PoH"] {
+                assert!(g.seed_file.placements.contains_key(name), "{name}");
             }
             assert!(g.report.contains(NOTE));
         }
@@ -564,11 +583,9 @@ mod tests {
         let d: Data = Data::load().unwrap();
         let key: &str = KEY_SPOTS[0];
         assert_eq!(at(&d, key, "Small Key (Bottom of the Well)"), Some(true));
-        // Another dungeon's key stands as its own pickup pack and credits its own dungeon after
-        // the get (crate::debug_names::key_credits), not the dungeon of the scene.
         assert_eq!(at(&d, key, "Small Key (Forest Temple)"), Some(true));
-        let forest: Option<String> = ks::dungeon_pick(&d, "Small Key (Forest Temple)").map(|p| p.pack);
-        let well: Option<String> = ks::dungeon_pick(&d, "Small Key (Bottom of the Well)").map(|p| p.pack);
+        let forest: Option<String> = crate::dungeon_packs::of(&d, "Small Key (Forest Temple)").map(|p| p.name());
+        let well: Option<String> = crate::dungeon_packs::of(&d, "Small Key (Bottom of the Well)").map(|p| p.name());
         assert!(forest.is_some() && well.is_some() && forest != well, "{forest:?} {well:?}");
         assert_eq!(at(&d, key, "Rupees (20)"), Some(true));
         assert_eq!(at(&d, "LH Underwater Item", "Rutos Letter"), Some(true));

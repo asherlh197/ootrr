@@ -53,6 +53,7 @@ pub enum Songs {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Plan {
+    pub own_strict: Vec<(&'static str, &'static str)>,
     pub chests: Mode,
     pub keys: di::Keys,
     pub rings: bool,
@@ -95,9 +96,9 @@ pub struct Plan {
     pub debug_names: bool,
     pub silver: bool,
     /// crate::medal_gate: Some(n) when the Light Arrows scene waits for n dungeon rewards.
-    pub lacs: Option<u8>,
+    pub lacs: Option<crate::medal_gate::Goal>,
     /// crate::rainbow_bridge: Some(n) when the bridge waits for n dungeon rewards.
-    pub rainbow: Option<u8>,
+    pub rainbow: Option<crate::medal_gate::Goal>,
     pub trials: crate::ganon_trials::Trials,
     pub door: crate::door_gate::Opts,
     pub nocturne: bool,
@@ -228,7 +229,12 @@ fn active_rings(
     }
 }
 
-pub const KEY_LAYOUTS: [&str; 3] = ["fire_key_layout", "water_key_layout", "spirit_key_layout"];
+pub const STRICT_KEYS: [(&str, &str); 3] = [("fire_key_layout", "shuffled"), ("water_key_layout", "shuffled"), ("spirit_key_layout", "shuffled")];
+pub const OWN_STRICT: [(&str, &str); 2] = [("water_key_layout", "shuffled"), ("spirit_key_layout", "shuffled")];
+pub const FIRE_LOOP: (&str, &str) = ("fire_loop_door", "open");
+pub const FIRE_LOOP_FLAG: &str = "IsChainLockDoorOpen.4189300454150217955";
+pub const FIRE_SPARE_KEY: &str = "Fire Temple Highest Goron Chest";
+pub const OWN_KEYS: [(&str, &str); 3] = [OWN_STRICT[0], OWN_STRICT[1], FIRE_LOOP];
 
 impl Plan {
     /// Standard rings selected for this seed, plus the manually toggled Hideout ring. Shared build
@@ -253,6 +259,18 @@ impl Plan {
         self.keys.small.roams()
     }
 
+    pub fn fire_loop_open(&self) -> bool {
+        self.keys.small == Keep::Dungeon
+    }
+
+    pub fn strict_layouts(&self) -> &[(&'static str, &'static str)] {
+        match self.keys.small {
+            Keep::Vanilla => &[],
+            Keep::Dungeon => &self.own_strict,
+            _ => &STRICT_KEYS,
+        }
+    }
+
     pub fn start_flags(&self) -> Vec<(String, bool)> {
         let mut out: Vec<(String, bool)> = match self.gates.forest {
             Forest::Closed => Vec::new(),
@@ -262,6 +280,9 @@ impl Plan {
             out.push((DOOR_OPENED.to_string(), true));
         }
         out.extend(di::start_flags(self));
+        if self.fire_loop_open() {
+            out.push((FIRE_LOOP_FLAG.to_string(), true));
+        }
         if self.first_pickups {
             out.extend(crate::first_pickups::start_flags());
         }
@@ -279,8 +300,9 @@ impl Plan {
         if self.gates.door {
             out.push(("open_door_of_time", "open"));
         }
-        if self.keys_roam() {
-            out.extend(KEY_LAYOUTS.iter().map(|k| (*k, "shuffled")));
+        out.extend(self.strict_layouts().iter().copied());
+        if self.fire_loop_open() {
+            out.push(FIRE_LOOP);
         }
         if self.rings {
             out.push((crate::key_rings::SETTING, "true"));
@@ -332,7 +354,7 @@ impl Plan {
             out.push((crate::prelude_gate::LOGIC_KEY, "true"));
         }
         if let Some(n) = self.lacs {
-            out.extend(crate::medal_gate::lacs_logic(n));
+            out.extend(crate::medal_gate::lacs_goal_logic(n));
         }
         if let Some(n) = self.rainbow {
             out.extend(crate::rainbow_bridge::logic(n));
@@ -458,8 +480,8 @@ pub fn plan_with_seed(s: &Settings, seed: Option<&str>) -> Res<Plan> {
     let bridge: bool = crate::deku_bridge::mode(s, &mut bad);
     let debug_names: bool = toggle(s, crate::debug_names::SETTING, &mut bad);
     let silver: bool = crate::slice::silver::mode(s, chests, &mut bad);
-    let lacs: Option<u8> = crate::medal_gate::read_lacs(s, keys.ganon, &mut bad);
-    let rainbow: Option<u8> = crate::rainbow_bridge::read(s, &mut bad);
+    let lacs: Option<crate::medal_gate::Goal> = crate::medal_gate::read_lacs(s, keys.ganon, &mut bad);
+    let rainbow: Option<crate::medal_gate::Goal> = crate::rainbow_bridge::read(s, &mut bad);
     let door: crate::door_gate::Opts = crate::door_gate::read(s, gates.door, &mut bad);
     let nocturne: bool = crate::nocturne_gate::read(s, &mut bad);
     let prelude: bool = crate::prelude_gate::read(s, &mut bad);
@@ -600,7 +622,8 @@ pub fn plan_with_seed(s: &Settings, seed: Option<&str>) -> Res<Plan> {
         notes.push(crate::lacs_key::NOTE.to_string());
         notes.push(crate::medal_gate::LACS_NOTE.to_string());
     }
-    Ok(Plan { chests, keys, rings, ring_mode, ring_count, active_rings, hideout_ring, hideout, rewards, hearts, world, songs, harp_colors, hints, fast, chest_sizes, intro, start, gates, excluded, notes, drops, skulls, remake, chus, qol, treasure, day_skulls, kit, open, npc, shops, bridge, debug_names, silver, lacs, rainbow, trials, door, nocturne, prelude, short, first_pickups, area_intros, story, endings, ocarinas, kokiri_sword, difficulty })
+    let own_strict: Vec<(&'static str, &'static str)> = if matches!(chests, Mode::Dungeons | Mode::All) { OWN_STRICT.to_vec() } else { Vec::new() };
+    Ok(Plan { own_strict, chests, keys, rings, ring_mode, ring_count, active_rings, hideout_ring, hideout, rewards, hearts, world, songs, harp_colors, hints, fast, chest_sizes, intro, start, gates, excluded, notes, drops, skulls, remake, chus, qol, treasure, day_skulls, kit, open, npc, shops, bridge, debug_names, silver, lacs, rainbow, trials, door, nocturne, prelude, short, first_pickups, area_intros, story, endings, ocarinas, kokiri_sword, difficulty })
 }
 
 #[cfg(test)]
@@ -674,12 +697,12 @@ mod tests {
         s.set("open_kakariko", Value::s("open")).unwrap();
         let p: Plan = plan(&s).unwrap();
         assert!(p.gates.kakariko);
-        assert_eq!(p.logic(), vec![("open_forest", "open"), ("open_kakariko", "open"), ("skip_child_zelda", "true"), (crate::open_world::EPONA, "1"), crate::open_world::trade::LOGIC[0]]);
-        assert_eq!(p.start_flags(), vec![(MIDO_WALL.to_string(), false), (EXIT_WALL.to_string(), false)]);
+        assert_eq!(p.logic(), [&[("open_forest", "open")][..], &OWN_KEYS, &[("open_kakariko", "open"), ("skip_child_zelda", "true"), (crate::open_world::EPONA, "1"), crate::open_world::trade::LOGIC[0]]].concat());
+        assert_eq!(p.start_flags(), vec![(MIDO_WALL.to_string(), false), (EXIT_WALL.to_string(), false), (FIRE_LOOP_FLAG.to_string(), true)]);
         s.set("open_kakariko", Value::s("closed")).unwrap();
         let p: Plan = plan(&s).unwrap();
         assert!(!p.gates.kakariko);
-        assert_eq!(p.logic(), vec![("open_forest", "open"), (crate::open_world::EPONA, "1"), crate::open_world::trade::LOGIC[0]]);
+        assert_eq!(p.logic(), [&[("open_forest", "open")][..], &OWN_KEYS, &[(crate::open_world::EPONA, "1"), crate::open_world::trade::LOGIC[0]]].concat());
         assert!(!p.notes.iter().any(|n| n.contains("Kakariko")));
     }
 
@@ -823,7 +846,7 @@ mod tests {
         s.set("open_kakariko", Value::s("closed")).unwrap();
         s.set("open_forest", Value::s("closed")).unwrap();
         assert!(!plan(&s).unwrap().keys_roam());
-        assert_eq!(plan(&s).unwrap().logic(), vec![(crate::open_world::EPONA, "1"), crate::open_world::trade::LOGIC[0]]);
+        assert_eq!(plan(&s).unwrap().logic(), [&OWN_KEYS[..], &[(crate::open_world::EPONA, "1"), crate::open_world::trade::LOGIC[0]]].concat());
         for v in ["any_dungeon", "keysanity"] {
             s.set("shuffle_smallkeys", Value::s(v)).unwrap();
             let p: Plan = plan(&s).unwrap();
@@ -832,6 +855,9 @@ mod tests {
             assert!(p.logic().iter().filter(|(k, _)| *k != crate::open_world::EPONA && *k != crate::open_world::trade::LOGIC[0].0).all(|(k, v)| k.ends_with("_key_layout") && *v == "shuffled"));
             assert!(p.notes.iter().any(|n| n.contains("Small keys can be found")));
         }
+        s.set("shuffle_smallkeys", Value::s("vanilla")).unwrap();
+        assert!(plan(&s).unwrap().strict_layouts().is_empty());
+        assert!(!plan(&s).unwrap().logic().iter().any(|(k, _)| k.ends_with("_key_layout")));
         s.set("shuffle_smallkeys", Value::s("overworld")).unwrap();
         assert!(plan(&s).is_err());
         s.set("shuffle_smallkeys", Value::s("dungeon")).unwrap();
@@ -847,13 +873,13 @@ mod tests {
         assert!(!plan(&s).unwrap().gates.door);
         s.set("open_door_of_time", Value::Bool(true)).unwrap();
         let p: Plan = plan(&s).unwrap();
-        assert_eq!(p.start_flags(), vec![(DOOR_OPENED.to_string(), true)]);
-        assert_eq!(p.logic(), vec![("open_door_of_time", "open"), (crate::open_world::EPONA, "1"), crate::open_world::trade::LOGIC[0], ("door_of_time_escape", "moat")]);
+        assert_eq!(p.start_flags(), vec![(DOOR_OPENED.to_string(), true), (FIRE_LOOP_FLAG.to_string(), true)]);
+        assert_eq!(p.logic(), [&[("open_door_of_time", "open")][..], &OWN_KEYS, &[(crate::open_world::EPONA, "1"), crate::open_world::trade::LOGIC[0], ("door_of_time_escape", "moat")]].concat());
         assert!(p.notes.iter().any(|n| n.contains("Door of Time starts open")));
         s.set("open_door_of_time", Value::Bool(false)).unwrap();
         let p: Plan = plan(&s).unwrap();
-        assert!(p.start_flags().is_empty());
-        assert_eq!(p.logic(), vec![(crate::open_world::EPONA, "1"), crate::open_world::trade::LOGIC[0]]);
+        assert_eq!(p.start_flags(), vec![(FIRE_LOOP_FLAG.to_string(), true)]);
+        assert_eq!(p.logic(), [&OWN_KEYS[..], &[(crate::open_world::EPONA, "1"), crate::open_world::trade::LOGIC[0]]].concat());
         assert!(!p.notes.iter().any(|n| n.contains("Door of Time starts open")));
     }
 
@@ -899,11 +925,11 @@ mod tests {
         s.set("open_door_of_time", Value::Bool(false)).unwrap();
         s.set("open_kakariko", Value::s("closed")).unwrap();
         s.set("open_forest", Value::s("closed")).unwrap();
-        assert!(plan(&s).unwrap().start_flags().is_empty());
+        assert_eq!(plan(&s).unwrap().start_flags(), vec![(FIRE_LOOP_FLAG.to_string(), true)]);
         s.set("open_forest", Value::s("open")).unwrap();
         let p: Plan = plan(&s).unwrap();
-        assert_eq!(p.start_flags().len(), 2);
-        assert_eq!(p.logic(), vec![("open_forest", "open"), (crate::open_world::EPONA, "1"), crate::open_world::trade::LOGIC[0]]);
+        assert_eq!(p.start_flags().len(), 3);
+        assert_eq!(p.logic(), [&[("open_forest", "open")][..], &OWN_KEYS, &[(crate::open_world::EPONA, "1"), crate::open_world::trade::LOGIC[0]]].concat());
         assert!(p.notes.iter().any(|n| n.contains("Kokiri Forest starts open")));
     }
 
@@ -912,16 +938,16 @@ mod tests {
         let mut s: Settings = Settings::default();
         assert_eq!(s.text("open_kakariko").unwrap(), "closed");
         let p: Plan = plan(&s).unwrap();
-        assert!(!p.gates.kakariko && p.defaults() == vec![(crate::open_world::TIME, "true")] && p.logic() == vec![(crate::open_world::EPONA, "1"), crate::open_world::trade::LOGIC[0]]);
+        assert!(!p.gates.kakariko && p.defaults() == vec![(crate::open_world::TIME, "true")] && p.logic() == [&OWN_KEYS[..], &[(crate::open_world::EPONA, "1"), crate::open_world::trade::LOGIC[0]]].concat());
         assert!(!p.notes.iter().any(|n| n.contains("open_kakariko")));
         s.set("open_forest", Value::s("open")).unwrap();
         s.set("open_kakariko", Value::s("open")).unwrap();
         let p: Plan = plan(&s).unwrap();
         assert!(p.gates.kakariko);
         assert_eq!(p.defaults(), vec![KAKARIKO, (crate::open_world::TIME, "true"), ("open_forest", "open")]);
-        assert_eq!(p.logic(), vec![("open_forest", "open"), KAKARIKO, ("skip_child_zelda", "true"), (crate::open_world::EPONA, "1"), crate::open_world::trade::LOGIC[0]]);
+        assert_eq!(p.logic(), [&[("open_forest", "open")][..], &OWN_KEYS, &[KAKARIKO, ("skip_child_zelda", "true"), (crate::open_world::EPONA, "1"), crate::open_world::trade::LOGIC[0]]].concat());
         assert!(p.notes.iter().any(|n| n.contains("Death Mountain starts open") && n.contains("Mask Shop")));
-        assert_eq!(p.start_flags(), vec![(MIDO_WALL.to_string(), false), (EXIT_WALL.to_string(), false)]);
+        assert_eq!(p.start_flags(), vec![(MIDO_WALL.to_string(), false), (EXIT_WALL.to_string(), false), (FIRE_LOOP_FLAG.to_string(), true)]);
         s.set("open_kakariko", Value::s("closed")).unwrap();
         assert!(!plan(&s).unwrap().gates.kakariko);
     }

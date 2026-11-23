@@ -349,10 +349,12 @@ mod tests {
 
     fn changed_rows(a: &Byml, b: &Byml) -> Vec<(String, u32)> {
         let mut out: Vec<(String, u32)> = Vec::new();
+        let ours: Vec<u32> = crate::key_log::added_hashes();
         for ((k, x), (_, z)) in tables(a).iter().zip(tables(b).iter()) {
-            let (xa, za): (&[Node], &[Node]) = (x.as_arr().unwrap(), z.as_arr().unwrap());
+            let xa: &[Node] = x.as_arr().unwrap();
+            let za: Vec<&Node> = z.as_arr().unwrap().iter().filter(|r| !hash_of(r).is_some_and(|h| ours.contains(&h))).collect();
             assert_eq!(xa.len(), za.len(), "{k}");
-            for (r, s) in xa.iter().zip(za.iter()) {
+            for (r, s) in xa.iter().zip(za.iter().copied()) {
                 assert_eq!(r.get("Hash"), s.get("Hash"));
                 if r != s {
                     out.push((k.clone(), hash_of(r).unwrap_or(0)));

@@ -1,5 +1,3 @@
-use crate::slice::data::Data;
-
 pub const SEED: &str = "Business Scrub Seed";
 
 pub const NEW: [&str; 18] = [
@@ -38,28 +36,16 @@ pub const PAIRED: [&str; 10] = [
 
 pub const SEEDED: [&str; 3] = ["ZR Open Grotto Chest", "Wasteland Chest", "Ganons Castle Spirit Trial Crystal Switch Chest"];
 
-pub const UNSURE: [&str; 7] = [
-    "Graveyard Dampe Race Low Rupee Chest",
-    "Graveyard Dampe Race High Rupee Chest",
-    "HF South Poe Chest",
-    "HF East Poe Chest",
-    "Kak Windmill Roof Chest",
-    "KF West Ledge Chest",
-    "ZF Scarecrow Ledge Chest",
-];
-
 pub fn gated(name: &str) -> bool {
     NEW.contains(&name) || PAIRED.contains(&name) || SEEDED.contains(&name)
 }
 
-pub fn keeps_out(d: &Data, name: &str, item: &str) -> bool {
-    UNSURE.contains(&name) && d.vanilla_of(name) != Some(item) && d.item(item).is_some_and(|i| i.adv)
-}
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::catalog::{Conf, Loc};
+    use crate::slice::data::Data;
     use crate::logic_items::ItemId;
     use crate::search::{explore, Search};
     use crate::settings::{Settings, Value};
@@ -211,7 +197,7 @@ mod tests {
     }
 
     #[test]
-    fn seeds_with_the_setting_on_win_and_keep_progression_off_the_unsure_chests() {
+    fn seeds_with_the_setting_on_win_and_move_the_new_chests() {
         let d: Data = Data::load().unwrap();
         let s: Settings = on();
         let p: Plan = plan(&s).unwrap();
@@ -222,9 +208,6 @@ mod tests {
             for (loc, item) in &g.seed_file.placements {
                 let l: LocId = w.loc(loc).unwrap();
                 assert!(allowed(&d, &w, &p, w.item(item).unwrap(), l), "{item} at {loc}");
-                if UNSURE.contains(&loc.as_str()) {
-                    assert!(d.vanilla_of(loc) == Some(item.as_str()) || !d.item(item).unwrap().adv, "{loc} holds {item}");
-                }
                 if gated(loc) && d.vanilla_of(loc) != Some(item.as_str()) {
                     moved += 1;
                 }

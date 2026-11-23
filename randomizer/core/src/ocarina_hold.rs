@@ -244,7 +244,12 @@ mod tests {
         let mut s: crate::settings::Settings = crate::settings::Settings::default();
         crate::slice::pick::shuffle_both(&mut s);
         let spot: &str = crate::slice::flow_rules::OCARINA_OF_TIME;
-        let mut g = crate::slice::generate::generate_data(&d, &s, "ocarina of time spot", &crate::slice::GenOpts::default()).unwrap();
+        // A seed whose Hookshots stand at spots that name no fixed tier, so the swap below keeps
+        // the upgrade order.
+        let mut g = (0..20)
+            .map(|n| crate::slice::generate::generate_data(&d, &s, &format!("ocarina of time spot {n}"), &crate::slice::GenOpts::default()).unwrap())
+            .find(|g| g.seed_file.placements.iter().all(|(l, i)| i != "Progressive Hookshot" || !crate::slice::tier_order::fixed_spot(&d, l)))
+            .unwrap();
         assert!(g.seed_file.placements.contains_key(spot), "the Ocarina of Time spot is not shuffled");
         // Put the Hookshot there; only the build is tested here.
         let at: String = g.seed_file.placements.iter().find(|(_, i)| i.as_str() == "Progressive Hookshot").map(|(l, _)| l.clone()).unwrap();

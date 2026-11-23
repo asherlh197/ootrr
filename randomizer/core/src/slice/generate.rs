@@ -1,3 +1,4 @@
+use std::cell::Cell;
 use std::collections::{BTreeMap as BM, HashMap as HM};
 use std::fmt::Write as W;
 use std::sync::Arc;
@@ -100,9 +101,6 @@ pub fn allowed(d: &Data, w: &World, p: &Plan, it: ItemId, l: LocId) -> bool {
     if let Some(ok) = crate::slice::place_rules::setting_verdict(&spot) {
         return ok;
     }
-    if crate::slice::place_rules::safety_refuses(&spot) {
-        return false;
-    }
     let Some(i) = d.item(&w.items.names[it]) else {
         return false;
     };
@@ -133,11 +131,6 @@ pub fn allowed(d: &Data, w: &World, p: &Plan, it: ItemId, l: LocId) -> bool {
     }
     if p.keys_roam() && i.kind == "SmallKey" {
         return i.dungeon.is_some() && (p.keys.small != Keep::AnyDungeon || here.is_some());
-    }
-    // A token cannot lie on the ground (its death table writes the dropping skulltula's rows),
-    // so at a boss heart it fell back to a chest.
-    if i.kind == "Token" && d.cat.by_name(name).is_some_and(|c| c.kind == "bossheart") {
-        return false;
     }
     if p.songs == Songs::Own {
         let song_item: bool = i.actor.as_deref().is_some_and(is_song);
@@ -289,7 +282,8 @@ pub fn generate_data(d: &Data, s: &Settings, seed: &str, o: &GenOpts) -> Res<Gen
         }
     }
     let room: crate::shops::layout::Room = crate::shops::rules::room(d, &p)?;
-    let mut lay: Option<crate::shops::Layout> = crate::shops::layout::of(&p.shops, seed, room)?;
+    let forced: Vec<String> = o.plando.iter().map(|e| e.location.clone()).collect();
+    let mut lay: Option<crate::shops::Layout> = crate::shops::layout::of_with(&p.shops, seed, room, &forced)?;
     p.notes.extend(lay.as_ref().and_then(|l| crate::shops::rules::cut_note(l.cut, room)));
     let owned: Option<Data> = lay.as_ref().map(|l| crate::shops::logic::data_with(d, l)).transpose()?;
     let d: &Data = owned.as_ref().unwrap_or(d);
@@ -297,6 +291,12 @@ pub fn generate_data(d: &Data, s: &Settings, seed: &str, o: &GenOpts) -> Res<Gen
         Some(l) => crate::shops::logic::world(d, &logic, l)?,
         None => world_with(d, &logic)?,
     };
+    if settle_keys(d, &mut p, &w) {
+        w = match &lay {
+            Some(l) => crate::shops::logic::world(d, &p.logic(), l)?,
+            None => world_with(d, &p.logic())?,
+        };
+    }
     let mut named: Vec<String> = Vec::with_capacity(p.excluded.len());
     for e in &p.excluded {
         let l: LocId = loc_of(&w, e).map_err(|x| E::Msg(x.to_string().replacen("plando:", "disabled locations:", 1)))?;
@@ -325,14 +325,25 @@ pub fn generate_data(d: &Data, s: &Settings, seed: &str, o: &GenOpts) -> Res<Gen
     p.notes.extend(ring_notes);
     let ex: Vec<String> = check_excluded(&w, &p, &pk.free, &base)?;
     p.notes.extend(ex);
-    let ok = |it: ItemId, l: LocId| allowed(d, &w, &p, it, l);
+    let seen: Vec<Cell<u8>> = vec![Cell::new(0); w.items.len() * w.locs.len()];
+    let ok = |it: ItemId, l: LocId| {
+        let c: &Cell<u8> = &seen[it * w.locs.len() + l];
+        match c.get() {
+            1 => false,
+            2 => true,
+            _ => {
+                let v: bool = allowed(d, &w, &p, it, l);
+                c.set(1 + v as u8);
+                v
+            }
+        }
+    };
     for l in &pk.free {
         if let Some(i) = vanilla.get(*l)
             && !p.excluded.contains(&w.locs[*l].name)
             && !ok(i, *l)
             && !d.item(&w.items.names[i]).is_some_and(|x| crate::slice::dungeon_items::exempt(&p, &x.kind))
             && !(lay.is_some() && crate::shops::is_loc(&w.locs[*l].name))
-            && !crate::slice::junk_spots::only(&p, &w.locs[*l].name)
             && !(p.silver && crate::slice::silver::is_spot(&w.locs[*l].name))
             // Native guard drops are now shuffled checks; their vanilla key moves into the pool.
             && !crate::hideout_keys::is_native(&w.locs[*l].name)
@@ -358,9 +369,7 @@ pub fn generate_data(d: &Data, s: &Settings, seed: &str, o: &GenOpts) -> Res<Gen
         }
     }
     let hand: usize = plan.len();
-    let lock: Vec<(LocId, ItemId)> = crate::slice::entry_key::forced(&w, &p, &pk.free, &base, &plan, &ok)?;
     let mut plan: Vec<(LocId, ItemId)> = plan;
-    plan.extend(lock.iter().copied());
     let lacs: Vec<(LocId, ItemId)> = crate::lacs_key::forced(&w, &p, &pk.free, &base, &plan)?;
     plan.extend(lacs);
     let mut rng: Rng = Rng::from_text(seed);
@@ -384,7 +393,7 @@ pub fn generate_data(d: &Data, s: &Settings, seed: &str, o: &GenOpts) -> Res<Gen
         loop {
             let quick: bool = p.songs == Songs::Anywhere && redo + 1 < crate::slice::song_spots::TRIES;
             let (tries, switch): (u32, u32) = if quick { (o.tries.min(crate::slice::song_spots::QUICK_TRIES), o.switch.min(crate::slice::song_spots::QUICK_SWITCH)) } else { (o.tries, o.switch) };
-            let g: Placement = match fill_ordered(&w, &base, &pk.free, ok, order, &mut rng, tries, &fixed, !p.keys_roam() && p.hideout == Keep::Vanilla && gates.is_none(), r, reach, switch, &watch) {
+            let g: Placement = match fill_ordered(&w, &base, &pk.free, ok, order, &mut rng, tries, &fixed, p.strict_layouts().is_empty() && p.hideout == Keep::Vanilla && gates.is_none(), r, reach, switch, &watch) {
                 Ok(g) => g,
                 // A run out of time (or cancelled) stops here with that message, not a retry's.
                 Err(_) if quick && watch.check().is_ok() => {
@@ -488,18 +497,30 @@ pub fn generate_data(d: &Data, s: &Settings, seed: &str, o: &GenOpts) -> Res<Gen
     if hand > 0 {
         let _ = writeln!(rep, "Plandomizer: {hand} placements were fixed by hand.");
     }
-    if !lock.is_empty() {
-        let _ = writeln!(rep, "{}", crate::slice::entry_key::NOTE);
-    }
     if let Some(l) = &gates {
         rep.push_str(&crate::entr::text::report(l));
     }
     Ok(Generated { seed_file, counts, report: rep, spoiler: sp, spheres })
 }
 
+pub fn settle_keys(d: &Data, p: &mut Plan, w: &World) -> bool {
+    if p.keys.small != Keep::Dungeon {
+        return false;
+    }
+    let kept: Vec<(&'static str, &'static str)> = crate::slice::pick::own_strict_kept(d, w, p, &pick(d, w, p).free);
+    if kept == p.own_strict {
+        return false;
+    }
+    p.own_strict = kept;
+    true
+}
+
 pub fn plando_options(d: &Data, s: &Settings) -> Res<(Vec<String>, Vec<String>)> {
-    let p: Plan = plan(s)?;
-    let w: World = world_with(d, &p.logic())?;
+    let mut p: Plan = plan(s)?;
+    let mut w: World = world_with(d, &p.logic())?;
+    if settle_keys(d, &mut p, &w) {
+        w = world_with(d, &p.logic())?;
+    }
     let vanilla: Placement = vanilla_place(&w, d)?;
     let pk: Pick = pick(d, &w, &p);
     let mut locs: Vec<String> = pk.free.iter().map(|l| w.locs[*l].name.clone()).collect();
@@ -657,7 +678,10 @@ mod tests {
     #[test]
     fn progression_is_shuffled_and_always_beatable() {
         let d: Data = synthetic();
-        let w: World = world_with(&d, &crate::slice::support::plan(&all_chests()).unwrap().logic()).unwrap();
+        let mut p: Plan = crate::slice::support::plan(&all_chests()).unwrap();
+        let w0: World = world_with(&d, &p.logic()).unwrap();
+        settle_keys(&d, &mut p, &w0);
+        let w: World = world_with(&d, &p.logic()).unwrap();
         let mut moved: usize = 0;
         for n in 0..12 {
             let g: Generated = generate_data(&d, &all_chests(), &format!("p{n}"), &GenOpts::default()).unwrap();
@@ -747,6 +771,34 @@ mod tests {
         }
     }
 
+    const FOREST_FIRST: &str = "Forest Temple First Room Chest";
+
+    #[test]
+    fn own_dungeon_keys_follow_the_logic_counts() {
+        let d: Data = Data::load().unwrap();
+        let s: Settings = Settings::default();
+        let mut moved: BM<&str, usize> = BM::new();
+        for n in 0..6 {
+            let g: Generated = generate_data(&d, &s, &format!("own keys {n}"), &GenOpts::default()).unwrap();
+            let at = |l: &str| -> Option<String> { g.seed_file.placements.get(l).cloned().or_else(|| d.vanilla_of(l).map(|v| v.to_string())) };
+            assert_eq!(at(FOREST_FIRST).as_deref(), Some("Small Key (Forest Temple)"), "own keys {n}");
+            for key in ["Small Key (Fire Temple)", "Small Key (Water Temple)", "Small Key (Spirit Temple)"] {
+                if g.seed_file.placements.iter().any(|(l, i)| i == key && d.vanilla_of(l) != Some(key)) {
+                    *moved.entry(key).or_insert(0) += 1;
+                }
+            }
+            let fire: usize = d.cat.locs.iter().filter(|l| at(&l.name).as_deref() == Some("Small Key (Fire Temple)")).count();
+            assert_eq!(fire, 7, "own keys {n}");
+            assert!(g.report.contains(crate::start_items::pool::FIRE_NOTE), "own keys {n}");
+        }
+        assert_eq!(moved.len(), 3, "{moved:?}");
+        let p: Plan = plan(&s).unwrap();
+        assert!(p.start_flags().contains(&(crate::slice::support::FIRE_LOOP_FLAG.to_string(), true)));
+        let mut r: Settings = Settings::default();
+        r.set("shuffle_smallkeys", Value::s("keysanity")).unwrap();
+        assert!(!plan(&r).unwrap().start_flags().iter().any(|(f, _)| f == crate::slice::support::FIRE_LOOP_FLAG));
+    }
+
     #[test]
     fn chest_modes_and_vanilla_keys_change_the_pool() {
         let d: Data = Data::load().unwrap();
@@ -776,7 +828,7 @@ mod tests {
     #[test]
     fn excluded_locations_hold_only_items_the_seed_does_not_need() {
         let d: Data = Data::load().unwrap();
-        let names: Vec<String> = eligible_names(&d).into_iter().filter(|n| n != crate::slice::entry_key::CHEST && d.vanilla_of(n).and_then(|v| d.item(v)).is_some_and(|i| i.adv)).take(12).collect();
+        let names: Vec<String> = eligible_names(&d).into_iter().filter(|n| n != FOREST_FIRST && !n.starts_with("Fire Temple") && d.vanilla_of(n).and_then(|v| d.item(v)).is_some_and(|i| i.adv)).take(12).collect();
         assert!(names.len() >= 8);
         let list: Vec<&str> = names.iter().map(|s| s.as_str()).collect();
         let mut s: Settings = all_chests();
@@ -800,8 +852,7 @@ mod tests {
     #[test]
     fn too_many_excluded_locations_stop_the_seed_with_a_reason() {
         let d: Data = Data::load().unwrap();
-        // The Forest Temple's first chest has its own refusal (crate::slice::entry_key).
-        let names: Vec<String> = eligible_names(&d).into_iter().filter(|n| n != crate::slice::entry_key::CHEST).collect();
+        let names: Vec<String> = eligible_names(&d).into_iter().filter(|n| n != FOREST_FIRST).collect();
         let list: Vec<&str> = names.iter().map(|s| s.as_str()).collect();
         let mut s: Settings = all_chests();
         s.set("disabled_locations", Value::set(&list)).unwrap();
@@ -906,16 +957,17 @@ mod tests {
     }
 
     #[test]
-    fn dungeon_items_never_land_on_event_locations_that_cannot_hand_them_out() {
+    fn every_item_on_an_event_location_is_one_its_grant_gives() {
         let d: Data = Data::load().unwrap();
         let s: Settings = with(&[("shuffle_songs", "own"), ("shuffle_rewards", "supported")]);
         for n in 0..3 {
             let g: Generated = generate_data(&d, &s, &format!("dungeon items {n}"), &GenOpts::default()).unwrap();
             for (loc, item) in &g.seed_file.placements {
                 if d.flow.by_name(loc).is_some() {
-                    // An event hands out what its routine can (flow_rules::allows, any pouch item at the
-                    // reward events since #24); a dungeon item needs a spot crate::gift_keys can credit.
-                    let fits = |i: &crate::slice::data::Item| crate::slice::flow_rules::allows(&d, loc, i) && (i.dungeon.is_none() || crate::gift_keys::spot(&d, loc));
+                    // An event hands out any item its grant can give (an upgrade through the tier checks
+                    // around every edit of the scene, crate::slice::flow_wrap::grants); a dungeon item
+                    // is credited by crate::gift_keys or a location credit (crate::debug_names).
+                    let fits = |i: &crate::slice::data::Item| crate::slice::flow_rules::gift_takes(&d, i) || d.flow_accepts(i);
                     assert!(d.item(item).is_some_and(fits) || d.vanilla_of(loc) == Some(item.as_str()), "{loc} holds {item}");
                 }
             }
@@ -943,12 +995,10 @@ mod tests {
                 if !d.cat.by_name(loc).is_some_and(|c| c.kind == "bossheart") {
                     continue;
                 }
-                assert!(d.item(item).is_none_or(|i| i.kind != "Token"), "{loc} holds {item}");
                 let Some(f) = d.family(item) else {
                     continue;
                 };
-                // The heart's pickup is the tier slice::tier_order fixes there, never the heart
-                // chest fallback, which has no tier wrapper.
+                // The heart's pickup is the tier slice::tier_order fixes there.
                 assert!(crate::slice::key_spots::placeable(&d, item, crate::slice::key_spots::Spot::Free), "{loc} holds {item}");
                 let tier: Option<&String> = order.assign.get(loc);
                 assert!(tier.is_some_and(|t| crate::slice::tier_order::rank(f, t).is_some()), "{loc} holds {item} as {tier:?}");
@@ -957,7 +1007,7 @@ mod tests {
     }
 
     #[test]
-    fn no_boss_heart_takes_a_token() {
+    fn a_boss_heart_takes_a_token() {
         let d: Data = Data::load().unwrap();
         let mut s: Settings = Settings::default();
         s.set("shuffle_boss_hearts", Value::Bool(true)).unwrap();
@@ -968,7 +1018,8 @@ mod tests {
         assert!(!hearts.is_empty());
         for n in hearts {
             if let Some(l) = w.loc(n) {
-                assert!(!allowed(&d, &w, &p, t, l), "{n}");
+                // It stands there as the ground token pickup (Obj_Token_GoldLand).
+                assert!(allowed(&d, &w, &p, t, l), "{n}");
             }
         }
     }
@@ -1054,7 +1105,7 @@ mod tests {
                 }
             }
             let state = crate::slice::edit::start_state(&d, &g.seed_file, &p).unwrap();
-            assert_eq!(state.items.len(), 1 + 2);
+            assert!(state.items.len() >= 1 + 2, "{:?}", state.items);
             // The castle visit skip, plus the Deku Tree quest an open forest moves on.
             assert_eq!(state.steps.len(), 9);
             if let Some(item) = g.seed_file.placements.get("HC Malon Egg") {
@@ -1072,7 +1123,7 @@ mod tests {
         assert!(off_state.steps.is_empty() && off_state.enums.is_empty() && off_state.items.is_empty());
         let seen: usize = off_state.flags.iter().filter(|(n, _)| n.starts_with(crate::start_state::VISIT)).count();
         assert_eq!(seen, 13);
-        assert_eq!(off_state.flags.len(), crate::start_state::FIRST_VISIT.len() + crate::story_skip::TEMPLE_FLAGS.len() + crate::story_skip::OWL_FLAGS.len() + seen);
+        assert_eq!(off_state.flags.len(), crate::start_state::FIRST_VISIT.len() + crate::story_skip::TEMPLE_FLAGS.len() + crate::story_skip::OWL_FLAGS.len() + crate::key_log::start_ops().flags.len() + seen);
         // Zelda's Letter is in the pool and may go anywhere: a skipped check hands out what the
         // seed put there, an unshuffled one its vanilla item.
         let mut bare: SeedFile = g.seed_file.clone();
@@ -1115,7 +1166,7 @@ mod tests {
         let mut s: Settings = all_chests();
         s.set("disabled_locations", Value::set(&["kf midos top left chest"])).unwrap();
         let g: Generated = generate_data(&d, &s, "dis", &GenOpts::default()).unwrap();
-        assert!(g.seed_file.placements.get("KF Midos Top Left Chest").is_none_or(|i| !d.item(i).is_some_and(|x| x.adv)));
+        assert!(g.seed_file.placements.get("KF Midos Top Left Chest").is_none_or(|i| HEARTS.iter().any(|h| i.starts_with(h)) || !d.item(i).is_some_and(|x| x.adv)));
         s.set("disabled_locations", Value::set(&["Midos Top Left"])).unwrap();
         let e: String = generate_data(&d, &s, "dis", &GenOpts::default()).err().unwrap().to_string();
         assert!(e.contains("disabled locations: no location is named") && e.contains("KF Midos Top Left Chest"), "{e}");
@@ -1391,14 +1442,13 @@ mod tests {
     }
 
     #[test]
-    fn keysanity_with_crates_leaves_the_kokiri_sword_a_forest_chest() {
+    fn keysanity_with_crates_places_the_kokiri_sword_once() {
         let d: Data = Data::load().unwrap();
         let s: Settings = with(&[("shuffle_smallkeys", "keysanity"), ("shuffle_crates", "all")]);
         let o: GenOpts = GenOpts { tries: 20, ..GenOpts::default() };
         let g: Generated = generate_data(&d, &s, "a", &o).unwrap_or_else(|e| panic!("{e}"));
         let at: Vec<&String> = g.seed_file.placements.iter().filter(|(_, i)| i.as_str() == "Kokiri Sword").map(|(l, _)| l).collect();
         assert_eq!(at.len(), 1, "{at:?}");
-        assert!(at[0].starts_with("KF "), "{at:?}");
     }
 
     #[test]

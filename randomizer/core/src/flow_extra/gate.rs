@@ -31,6 +31,9 @@ pub fn open(l: &Loc, p: &Plan) -> bool {
     if crate::flow_extra::potion::is(&l.name) {
         return p.rewards.potion;
     }
+    if crate::flow_extra::sun::is(&l.name) {
+        return true;
+    }
     if crate::open_world::skips::is_bean_sale(&l.name) {
         return p.rewards.bean_sale;
     }
@@ -45,7 +48,7 @@ pub fn pouch(i: &Item) -> bool {
 }
 
 pub fn bound(d: &Data, item: &str) -> bool {
-    d.flow.locs.iter().any(|l| l.gated && !crate::flow_extra::trade::is(&l.name) && !crate::flow_extra::cows::is(&l.name) && !crate::flow_extra::frogs::is(&l.name) && !crate::flow_extra::potion::is(&l.name) && !crate::scrubs_a::is_a(l) && !crate::scrubs_b::is_b(l) && !crate::open_world::skips::is_bean_sale(&l.name) && d.vanilla_of(&l.name) == Some(item) && d.flow_ok(&l.name))
+    d.flow.locs.iter().any(|l| l.gated && !crate::flow_extra::trade::is(&l.name) && !crate::flow_extra::cows::is(&l.name) && !crate::flow_extra::frogs::is(&l.name) && !crate::flow_extra::potion::is(&l.name) && !crate::flow_extra::sun::is(&l.name) && !crate::scrubs_a::is_a(l) && !crate::scrubs_b::is_b(l) && !crate::open_world::skips::is_bean_sale(&l.name) && d.vanilla_of(&l.name) == Some(item) && d.flow_ok(&l.name))
 }
 
 /// Whether a gated reward spot can hold `i`. The items bound to a gated reward (bound: the
@@ -77,7 +80,7 @@ mod tests {
     }
 
     fn gated(d: &Data) -> Vec<String> {
-        d.flow.locs.iter().filter(|l| l.gated && !crate::flow_extra::trade::is(&l.name) && !crate::flow_extra::cows::is(&l.name) && !crate::flow_extra::frogs::is(&l.name) && !crate::flow_extra::potion::is(&l.name) && !crate::scrubs_a::is_a(l) && !crate::scrubs_b::is_b(l) && !crate::open_world::skips::is_bean_sale(&l.name)).map(|l| l.name.clone()).collect()
+        d.flow.locs.iter().filter(|l| l.gated && !crate::flow_extra::trade::is(&l.name) && !crate::flow_extra::cows::is(&l.name) && !crate::flow_extra::frogs::is(&l.name) && !crate::flow_extra::potion::is(&l.name) && !crate::flow_extra::sun::is(&l.name) && !crate::scrubs_a::is_a(l) && !crate::scrubs_b::is_b(l) && !crate::open_world::skips::is_bean_sale(&l.name)).map(|l| l.name.clone()).collect()
     }
 
     #[test]

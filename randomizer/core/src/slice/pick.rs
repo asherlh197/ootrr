@@ -12,6 +12,22 @@ pub struct Pick {
     pub flow: usize,
 }
 
+const COUNTED: [(&str, &str); 3] = [("Small Key (Fire Temple)", "fire_key_layout"), ("Small Key (Water Temple)", "water_key_layout"), ("Small Key (Spirit Temple)", "spirit_key_layout")];
+
+pub fn key_of(layout: &str) -> Option<&'static str> {
+    COUNTED.iter().find(|(_, l)| *l == layout).map(|(k, _)| *k)
+}
+
+pub fn own_strict_kept(d: &Data, w: &World, p: &Plan, free: &[LocId]) -> Vec<(&'static str, &'static str)> {
+    p.own_strict
+        .iter()
+        .copied()
+        .filter(|(lay, _)| {
+            key_of(lay).is_some_and(|k| w.real.iter().filter(|l| d.vanilla_of(&w.locs[**l].name) == Some(k)).all(|l| free.contains(l)))
+        })
+        .collect()
+}
+
 pub const OCARINAS: &str = "shuffle_ocarinas";
 pub const OCARINAS_NUM: u16 = 105;
 pub const SWORD: &str = "shuffle_kokiri_sword";
@@ -25,8 +41,6 @@ pub fn shuffle_both(s: &mut crate::settings::Settings) {
         s.set(k, crate::settings::Value::Bool(true)).unwrap();
     }
 }
-
-const COUNTED_VANILLA: [&str; 3] = ["Small Key (Fire Temple)", "Small Key (Water Temple)", "Small Key (Spirit Temple)"];
 
 fn class(kind: &str) -> u8 {
     match kind {
@@ -81,9 +95,6 @@ fn reason(d: &Data, w: &World, p: &Plan, name: &str) -> Option<String> {
     let kind: &str = d.vanilla_of(name).and_then(|v| d.item(v)).map(|i| i.kind.as_str()).unwrap_or("");
     if pinned_vanilla(p, kind) {
         return Some("its dungeon item setting is vanilla".to_string());
-    }
-    if !p.keys_roam() && d.vanilla_of(name).is_some_and(|v| COUNTED_VANILLA.contains(&v)) {
-        return Some("its dungeon's keys are counted for the vanilla layout".to_string());
     }
     if d.keeps_event(name) && !d.special(name) && d.vanilla_of(name).is_some_and(|v| d.family(v).is_some()) {
         return Some("it holds an upgrade item behind a story event".to_string());
@@ -181,7 +192,6 @@ pub fn pick(d: &Data, w: &World, p: &Plan) -> Pick {
     free.extend(sk);
     flow += n;
     flow += crate::slice::silver::select(w, p, &mut free, &mut left);
-    crate::slice::junk_spots::trim(d, w, p, &mut free, &mut left);
     free.sort_unstable();
     free.dedup();
     Pick { free, left, flow }

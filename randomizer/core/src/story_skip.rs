@@ -1764,6 +1764,33 @@ const RAURU_GIVE: &str = "OOTRRRauruGive";
 /// chain. That add becomes a fade in and the standard item get with what the check holds (with
 /// its tier checks or its dungeon credit), still before the transition to the adult temple.
 /// Runs after patch_draw.
+pub fn patch_sun_give(b: &mut Bf, g: &SceneGive) -> Res<()> {
+    let f: &mut Flow = flow_mut(b, crate::flow_extra::sun::FLOW)?;
+    let named = |f: &Flow, n: &str| -> Res<usize> {
+        let hits: Vec<usize> = (0..f.events.len()).filter(|&i| f.events[i].name == n).collect();
+        match hits.as_slice() {
+            [i] => Ok(*i),
+            _ => Err(Error::Msg(format!("lh sun: expected one {n} in {}, found {}", f.name, hits.len()))),
+        }
+    };
+    let step: usize = named(f, "Event1")?;
+    let done: usize = named(f, "Event2")?;
+    let steps = |f: &Flow, i: usize, want: &str| f.events[i].kind.params().and_then(|c| c.get("StepName")) == Some(&Val::Str(want.to_string()));
+    if !steps(f, step, "Step03") || !steps(f, done, "Complete") {
+        return Err(Error::Format("lh sun: Event1 and Event2 no longer move the Fire Arrows quest to Step03 and Complete"));
+    }
+    if next_of(&f.events[step].kind) != Some(NONE) {
+        return Err(Error::Format("lh sun: Event1 is no longer the end of FireArrow_Appear"));
+    }
+    set_next(&mut f.events[done].kind, NONE)?;
+    let at: u16 = item_get(f, "OOTRRSunGive", g, idx(done)?, &["FireArrow_Appear"])?;
+    set_next(&mut f.events[step].kind, at)
+}
+
+pub fn stage_sun_give(rf: &mut Romfs, late: &mut Vec<Out>, work: &std::path::Path, g: &SceneGive) -> Res<()> {
+    stage_late(rf, late, work, crate::flow_extra::sun::FLOW, |b| patch_sun_give(b, g))
+}
+
 pub fn patch_rauru_give(b: &mut Bf, g: &SceneGive) -> Res<()> {
     let f: &mut Flow = flow_mut(b, DOOR_FLOW)?;
     let adds: Vec<usize> = (0..f.events.len())

@@ -220,7 +220,7 @@
         "region_name": "HF Near Kak Grotto",
         "scene": "HF Near Kak Grotto",
         "locations": {
-            "HF GS Near Kak Grotto": "can_use(Boomerang) or can_use(Hookshot)"
+            "HF GS Near Kak Grotto": "is_adult and can_break_crate and at('HF Near Kak Grotto', is_child and can_child_attack)"
         },
         "exits": {
             "Hyrule Field": "True"

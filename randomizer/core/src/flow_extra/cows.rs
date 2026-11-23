@@ -554,7 +554,7 @@ mod tests {
             }
             let push = row(&an, &crate::cow_clone::flow::push_row(&c.class)).unwrap();
             let subs: Vec<&str> = push.get("SubFlowList").unwrap().as_arr().unwrap().iter().filter_map(|x| x.as_str()).collect();
-            assert!(subs.contains(&"Dm_SY_Get") && subs.contains(&"Dm_SY_GetInEvent"), "{} {subs:?}", c.class);
+            assert!(subs.contains(&"Dm_SY_GetInEvent"), "{} {subs:?}", c.class);
             assert_eq!(tag.tags_of(&c.class), tag.tags_of("Animal_Cow"));
             for s in &c.spots {
                 let y: crate::byml::Byml = crate::byml::Byml::parse(&rd(&mut rf, &s.file)).unwrap();

@@ -195,14 +195,15 @@ mod tests {
     }
 
     #[test]
-    fn plando_can_put_an_item_at_a_scrub_but_not_a_refused_one() {
+    fn plando_can_put_any_item_at_a_scrub() {
         let d: Data = Data::load().unwrap();
         let s: Settings = with(true, Some(true));
         let o: GenOpts = GenOpts { plando: vec![Entry { location: "DMC Deku Scrub".to_string(), item: "Hover Boots".to_string() }], ..GenOpts::default() };
         let g: Generated = generate_data(&d, &s, "plando", &o).unwrap();
         assert_eq!(g.seed_file.placements["DMC Deku Scrub"], "Hover Boots");
-        let bad: GenOpts = GenOpts { plando: vec![Entry { location: "LW Deku Scrub Near Bridge".to_string(), item: "Deku Nut Capacity".to_string() }], ..GenOpts::default() };
-        assert!(generate_data(&d, &s, "plando", &bad).is_err());
+        // A scrub that exists once per age sells once: its sale flag is its own.
+        let other: GenOpts = GenOpts { plando: vec![Entry { location: "LW Deku Scrub Near Bridge".to_string(), item: "Deku Nut Capacity".to_string() }], ..GenOpts::default() };
+        assert_eq!(generate_data(&d, &s, "plando", &other).unwrap().seed_file.placements["LW Deku Scrub Near Bridge"], "Deku Nut Capacity");
         let back: GenOpts = GenOpts { plando: vec![Entry { location: "LW Deku Scrub Near Bridge".to_string(), item: "Deku Stick Capacity".to_string() }], ..GenOpts::default() };
         assert_eq!(generate_data(&d, &s, "plando", &back).unwrap().seed_file.placements["LW Deku Scrub Near Bridge"], "Deku Stick Capacity");
     }

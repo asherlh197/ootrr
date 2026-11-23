@@ -221,8 +221,8 @@ mod tests {
         let t: &Table = table().unwrap();
         assert_eq!(t.shops.len(), 8);
         assert_eq!(t.slots.len(), 64);
-        assert!(is_loc("KF Shop Item 1"));
-        assert!(is_loc("ZD Shop Item 8"));
+        assert!(is_loc("KF Shop Right Side Bottom Left"));
+        assert!(is_loc("ZD Shop Left Side Top Left"));
         assert!(!is_loc("Market Mask Shop Item 1"));
         assert!(!is_loc("KF Shop Wonderitem"));
         let units: std::collections::BTreeSet<String> = t.slots.iter().map(|s| t.unit(s)).collect();

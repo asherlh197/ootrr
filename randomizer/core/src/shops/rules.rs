@@ -100,15 +100,13 @@ mod tests {
         let off: Opts = Opts::default();
         let on: Opts = Opts { level: Level::Deals(2), prices: Prices::Weighted, min: 0, max: 95, kinds: Kinds::ALL };
         let plain: Opts = Opts { level: Level::Shuffle, ..on };
-        assert_eq!(at(&d, &off, true, "KF Shop Item 1", "Boomerang"), None);
+        assert_eq!(at(&d, &off, true, "KF Shop Right Side Bottom Left", "Boomerang"), None);
         assert_eq!(at(&d, &on, true, "KF Midos Top Left Chest", "Boomerang"), None);
-        assert_eq!(at(&d, &plain, true, "KF Shop Item 1", "Boomerang"), Some(false));
-        for shop in ["GC Shop Item 5", "KF Shop Item 7", "Market Bazaar Item 1"] {
+        assert_eq!(at(&d, &plain, true, "KF Shop Right Side Bottom Left", "Boomerang"), Some(false));
+        for shop in ["GC Shop Left Side Bottom Right", "KF Shop Right Side Top Right", "Market Bazaar Right Side Bottom Left"] {
             for good in ["Boomerang", "Progressive Hookshot", "Bow", "Slingshot", "Bomb Bag", "Magic Meter", "Piece of Heart", "Bombchus (10)", "Rupees (20)", "Bottle", "Bombs (10)", "Kokiri Emerald", "Recovery Heart"] {
                 assert_eq!(at(&d, &on, true, shop, good), Some(true), "{shop} {good}");
             }
-            // A dungeon item sells as its own item and the shop credits its dungeon after the sale
-            // (crate::shelf::hook::Credit).
             for good in ["Small Key (Forest Temple)", "Boss Key (Forest Temple)", "Map (Forest Temple)", "Compass (Forest Temple)"] {
                 assert_eq!(at(&d, &on, true, shop, good), Some(true), "{shop} {good}");
             }

@@ -1,6 +1,13 @@
 pub mod anju;
 pub mod blocks;
 pub mod chest_anim;
+pub mod dampe_dig;
+pub mod dampe_race;
+pub mod fishing;
+pub mod night_skulls;
+pub mod scarecrow;
+pub mod skull_kid_session;
+pub mod tower_escape;
 pub mod bunny;
 pub mod navi_return;
 pub mod owl;
@@ -41,6 +48,13 @@ pub struct Opts {
     pub big_chests: bool,
     pub blocks: bool,
     pub owls: bool,
+    pub suns_skulls: bool,
+    pub any_fish: bool,
+    pub free_scarecrow: bool,
+    pub skip_escape: bool,
+    pub fast_session: bool,
+    pub one_race: bool,
+    pub first_dig: bool,
 }
 
 pub type Have<'a> = &'a dyn Fn(&str) -> Option<Vec<u8>>;
@@ -57,6 +71,15 @@ impl Opts {
         }
         if self.poe {
             out.push((poe::LOGIC_KEY, "1"));
+        }
+        if self.suns_skulls {
+            out.push((night_skulls::LOGIC_SUNS, "true"));
+        }
+        if self.free_scarecrow {
+            out.push((scarecrow::LOGIC_KEY, scarecrow::LOGIC_ON));
+        }
+        if self.skip_escape {
+            out.push((tower_escape::SETTING, "true"));
         }
         out
     }
@@ -93,7 +116,32 @@ impl Opts {
         if self.owls {
             out.push(owl::NOTE.to_string());
         }
+        if self.suns_skulls {
+            out.push(night_skulls::NOTE_SUNS.to_string());
+        }
+        if self.any_fish {
+            out.push(fishing::NOTE.to_string());
+        }
+        if self.free_scarecrow {
+            out.push(scarecrow::NOTE.to_string());
+        }
+        if self.skip_escape {
+            out.push(tower_escape::NOTE.to_string());
+        }
+        if self.fast_session {
+            out.push(skull_kid_session::NOTE.to_string());
+        }
+        if self.one_race {
+            out.push(dampe_race::NOTE.to_string());
+        }
+        if self.first_dig {
+            out.push(dampe_dig::NOTE.to_string());
+        }
         out
+    }
+
+    pub fn maps(&self) -> bool {
+        self.skip_escape
     }
 }
 
@@ -122,6 +170,13 @@ pub fn read(s: &Settings, bad: &mut Vec<String>) -> Opts {
     let big_chests: bool = flag(chest_anim::SETTING);
     let blocks: bool = flag(blocks::SETTING);
     let owls: bool = flag(owl::SETTING);
+    let suns_skulls: bool = flag(night_skulls::SUNS);
+    let any_fish: bool = true;
+    let free_scarecrow: bool = flag(scarecrow::SETTING);
+    let skip_escape: bool = flag(tower_escape::SETTING);
+    let fast_session: bool = true;
+    let one_race: bool = true;
+    let first_dig: bool = true;
     let navi: navi_return::Mode = match s.text(NAVI) {
         Ok("off") => navi_return::Mode::Off,
         Ok("dungeons") => navi_return::Mode::Dungeons,
@@ -148,7 +203,19 @@ pub fn read(s: &Settings, bad: &mut Vec<String>) -> Opts {
             bunny::Mode::Off
         }
     };
-    Opts { skip, anju, poe, navi, bunny, big_chests, blocks, owls }
+    Opts { skip, anju, poe, navi, bunny, big_chests, blocks, owls, suns_skulls, any_fish, free_scarecrow, skip_escape, fast_session, one_race, first_dig }
+}
+
+pub fn settings() -> Vec<crate::settings::Setting> {
+    use crate::settings::Setting;
+    vec![
+        Setting::toggle(night_skulls::SUNS_NUM, night_skulls::SUNS, "world", "Night Gold Skulltulas expect Sun's Song", false)
+            .tip("The logic only expects you to get a night Gold Skulltula once you can play Sun's Song, so no check is placed behind one before that. Like the OoTR trick option of the same name. Has no effect with Skulltulas by day."),
+        Setting::toggle(scarecrow::NUM, scarecrow::SETTING, "world", "Free Scarecrow's Song", false)
+            .tip("Start with Scarecrow's Song and an instant scarecrow: take out the Ocarina at one of Pierre's spots and he appears there, with no song to record or play. The logic counts the song as known, like the OoTR option of the same name. Tested in the game."),
+        Setting::toggle(tower_escape::NUM, tower_escape::SETTING, "goal", "Skip the tower escape", false)
+            .tip("After Ganondorf falls, Link goes straight to the field below the collapsing tower and the Ganon fight, with no escape run down the tower, so the logic no longer needs the Longshot to finish. Without this, the logic needs the Longshot for the escape. Tested in the game."),
+    ]
 }
 
 pub fn files() -> Vec<String> {
@@ -261,7 +328,7 @@ mod tests {
         let mut bad: Vec<String> = Vec::new();
         let o: Opts = read(&s, &mut bad);
         assert!(bad.is_empty());
-        assert_eq!(o, Opts { skip: Skip::Story, anju: true, poe: true, navi: navi_return::Mode::Off, bunny: bunny::Mode::Off, big_chests: false, blocks: false, owls: false });
+        assert_eq!(o, Opts { skip: Skip::Story, anju: true, poe: true, navi: navi_return::Mode::Off, bunny: bunny::Mode::Off, big_chests: false, blocks: false, owls: false, ..Opts::default() });
         s.set(BUNNY, Value::s("jump")).unwrap();
         assert_eq!(read(&s, &mut bad).bunny, bunny::Mode::Jump);
         assert_eq!(read(&s, &mut bad).notes().len(), 4);
@@ -318,18 +385,18 @@ mod tests {
         use crate::slice::support::plan;
         let p: crate::slice::support::Plan = plan(&quiet()).unwrap();
         assert!(!p.qol.any());
-        assert_eq!(p.logic(), vec![(crate::open_world::EPONA, "1"), crate::open_world::trade::LOGIC[0]]);
+        assert_eq!(p.logic(), [&crate::slice::support::OWN_KEYS[..], &[(crate::open_world::EPONA, "1"), crate::open_world::trade::LOGIC[0]]].concat());
         let base: usize = p.notes.len();
         assert_eq!(plan(&Settings::default()).unwrap().notes.len(), base + 1, "Return with Navi adds its note");
         for (k, v, key) in [(ANJU, Value::Bool(true), "chicken_count"), (POE, Value::Bool(true), "big_poe_count")] {
             let p: crate::slice::support::Plan = plan(&with(&[(NAVI, Value::s("off")), (k, v)])).unwrap();
             assert!(p.qol.any());
-            assert_eq!(p.logic(), vec![(key, "1"), (crate::open_world::EPONA, "1"), crate::open_world::trade::LOGIC[0]]);
+            assert_eq!(p.logic(), [&crate::slice::support::OWN_KEYS[..], &[(key, "1"), (crate::open_world::EPONA, "1"), crate::open_world::trade::LOGIC[0]]].concat());
             assert_eq!(p.notes.len(), base + 1);
         }
         let p: crate::slice::support::Plan = plan(&with(&[(SKIP, Value::s("all"))])).unwrap();
         assert_eq!(p.qol.skip, Skip::All);
-        assert_eq!(p.logic(), vec![(crate::open_world::EPONA, "1"), crate::open_world::trade::LOGIC[0]]);
+        assert_eq!(p.logic(), [&crate::slice::support::OWN_KEYS[..], &[(crate::open_world::EPONA, "1"), crate::open_world::trade::LOGIC[0]]].concat());
         assert!(Settings::default().set(SKIP, Value::s("everything")).is_err());
     }
 

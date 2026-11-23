@@ -68,10 +68,50 @@ pub fn layers(rf: &mut Romfs, item: &str, l: &Layers) -> Res<Layers> {
 
 /// The lift of the seed pickup pack `pack` (a pickup the catalog builds), in metres.
 pub fn for_pack(t: &Byml, pack: &str) -> Option<f32> {
-    let p: crate::slice::key_spots::Pick = crate::slice::key_spots::by_pack(pack)?;
+    let p: crate::slice::key_spots::Pick = pick_of(pack)?;
     let (s, l) = p.spec().ok()?;
     let mm: u32 = lift_of(t, l.model.as_deref().unwrap_or(s.source()));
     (mm > 0).then_some(mm as f32 / 1000.0)
+}
+
+pub const LOOK: f32 = 0.45;
+pub const GROW_MAX: f32 = 2.0;
+
+pub fn grow(reach: f32) -> f32 {
+    if reach <= 0.0 {
+        return 1.0;
+    }
+    (LOOK / reach).clamp(1.0, GROW_MAX)
+}
+
+pub fn pick_of(pack: &str) -> Option<crate::slice::key_spots::Pick> {
+    crate::slice::key_spots::by_pack(pack).or_else(|| crate::dungeon_packs::by_name(pack).map(|p| p.pick()))
+}
+
+pub fn look_for_pack(t: &Byml, pack: &str) -> Option<(f32, f32)> {
+    let p: crate::slice::key_spots::Pick = pick_of(pack)?;
+    let (s, l) = p.spec().ok()?;
+    let reach: f32 = lift_of(t, l.model.as_deref().unwrap_or(&s.item)) as f32 / 1000.0;
+    if reach <= 0.0 {
+        return None;
+    }
+    let k: f32 = grow(reach);
+    Some(((reach * k).min(CAP as f32 / 1000.0), k))
+}
+
+pub fn scale(y: &mut Byml, hash: u64, k: f32) -> usize {
+    let Some(list) = y.root.get_mut("Actors").and_then(|a| a.as_arr_mut()) else {
+        return 0;
+    };
+    let mut n: usize = 0;
+    for a in list.iter_mut() {
+        if crate::placement::hash_of(a) != Some(hash) {
+            continue;
+        }
+        a.set("Scale", Node::Arr(vec![Node::F32(k); 3]));
+        n += 1;
+    }
+    n
 }
 
 pub fn perimeter_file(name: &str) -> String {
@@ -151,6 +191,32 @@ mod tests {
         assert_eq!(of_row(&row(v(-0.10858154, -0.039733887, -0.120462894), v(0.10882568, 0.03945923, 0.5272422))), Some(527));
         assert_eq!(of_row(&row(v(-0.44, -0.27, -0.32), v(0.21, 0.27, 1.45))), Some(CAP));
         assert_eq!(of_row(&Node::Map(Vec::new())), None);
+    }
+
+    #[test]
+    fn small_items_grow_toward_the_look_size_and_big_ones_stay() {
+        assert_eq!(grow(0.1), GROW_MAX);
+        assert!((grow(0.3) - 1.5).abs() < 1e-5);
+        assert_eq!(grow(0.6), 1.0);
+        assert_eq!(grow(0.0), 1.0);
+    }
+
+    #[test]
+    fn dungeon_item_packs_find_their_pick_for_the_lift() {
+        for n in ["Obj_BossKey_FireTemple", "Obj_SmallKey_WaterTemple", "Obj_Map_ForestTemple", "Obj_Compass_SpiritTemple"] {
+            assert_eq!(pick_of(n).map(|p| p.pack), Some(n.to_string()), "{n}");
+        }
+        assert!(pick_of("Obj_BossKey_Nowhere").is_none());
+    }
+
+    #[test]
+    fn a_scaled_placement_carries_the_scale_on_every_axis() {
+        let a = |h: u64| Node::Map(vec![("Hash".into(), Node::U64(h)), ("Translate".into(), Node::Arr(vec![Node::F32(0.0); 3]))]);
+        let mut y: Byml = Byml { root: Node::Map(vec![("Actors".into(), Node::Arr(vec![a(1), a(2)]))]), version: 7, big: false };
+        assert_eq!(scale(&mut y, 2, 1.5), 1);
+        let list = y.root.get("Actors").and_then(|v| v.as_arr()).unwrap();
+        assert_eq!(list[1].get("Scale"), Some(&Node::Arr(vec![Node::F32(1.5); 3])));
+        assert_eq!(list[0].get("Scale"), None);
     }
 
     #[test]

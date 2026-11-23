@@ -8,6 +8,7 @@ mod gate;
 mod op;
 pub mod potion;
 pub mod sim;
+pub mod sun;
 pub mod trade;
 
 pub use apply::{always_ops, edit_bytes, edit_flow, ops_for, ops_of};
