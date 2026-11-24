@@ -42,6 +42,15 @@ pub fn of_row(row: &Node) -> Option<u32> {
     Some(((far * 1000.0).round() as u32).min(CAP))
 }
 
+/// How far a model hangs below its origin, in metres, from its actor row's ModelAabbMin (0 for a
+/// model that stands on its origin), up to [`CAP`]. A shelf deal stands without a turn, so
+/// raising it by this much seats the model on the shelf board, as the shop's own goods sit (their
+/// models start at the origin).
+pub fn below_of(row: &Node) -> Option<f32> {
+    let y: f32 = num(row.get("ModelAabbMin")?.get("Y")?)?;
+    Some((-y).clamp(0.0, CAP as f32 / 1000.0))
+}
+
 fn num(n: &Node) -> Option<f32> {
     match n {
         Node::F32(x) => Some(*x),
@@ -74,45 +83,10 @@ pub fn for_pack(t: &Byml, pack: &str) -> Option<f32> {
     (mm > 0).then_some(mm as f32 / 1000.0)
 }
 
-pub const LOOK: f32 = 0.45;
-pub const GROW_MAX: f32 = 2.0;
-
-pub fn grow(reach: f32) -> f32 {
-    if reach <= 0.0 {
-        return 1.0;
-    }
-    (LOOK / reach).clamp(1.0, GROW_MAX)
-}
-
 pub fn pick_of(pack: &str) -> Option<crate::slice::key_spots::Pick> {
     crate::slice::key_spots::by_pack(pack).or_else(|| crate::dungeon_packs::by_name(pack).map(|p| p.pick()))
 }
 
-pub fn look_for_pack(t: &Byml, pack: &str) -> Option<(f32, f32)> {
-    let p: crate::slice::key_spots::Pick = pick_of(pack)?;
-    let (s, l) = p.spec().ok()?;
-    let reach: f32 = lift_of(t, l.model.as_deref().unwrap_or(&s.item)) as f32 / 1000.0;
-    if reach <= 0.0 {
-        return None;
-    }
-    let k: f32 = grow(reach);
-    Some(((reach * k).min(CAP as f32 / 1000.0), k))
-}
-
-pub fn scale(y: &mut Byml, hash: u64, k: f32) -> usize {
-    let Some(list) = y.root.get_mut("Actors").and_then(|a| a.as_arr_mut()) else {
-        return 0;
-    };
-    let mut n: usize = 0;
-    for a in list.iter_mut() {
-        if crate::placement::hash_of(a) != Some(hash) {
-            continue;
-        }
-        a.set("Scale", Node::Arr(vec![Node::F32(k); 3]));
-        n += 1;
-    }
-    n
-}
 
 pub fn perimeter_file(name: &str) -> String {
     format!("Component/PerimeterAnalyserParam/{name}.game__component__PerimeterAnalyserParam.bgyml")
@@ -194,11 +168,12 @@ mod tests {
     }
 
     #[test]
-    fn small_items_grow_toward_the_look_size_and_big_ones_stay() {
-        assert_eq!(grow(0.1), GROW_MAX);
-        assert!((grow(0.3) - 1.5).abs() < 1e-5);
-        assert_eq!(grow(0.6), 1.0);
-        assert_eq!(grow(0.0), 1.0);
+    fn a_shelf_model_rises_by_how_far_it_hangs_below_its_origin() {
+        let row = |a: Node| Node::Map(vec![("ModelAabbMin".into(), a)]);
+        assert_eq!(below_of(&row(v(-0.52, -0.1521505, -0.15))), Some(0.1521505));
+        assert_eq!(below_of(&row(v(-0.1, 0.0072, -0.04))), Some(0.0));
+        assert_eq!(below_of(&row(v(0.0, -2.0, 0.0))), Some(CAP as f32 / 1000.0));
+        assert_eq!(below_of(&Node::Map(Vec::new())), None);
     }
 
     #[test]
@@ -210,13 +185,13 @@ mod tests {
     }
 
     #[test]
-    fn a_scaled_placement_carries_the_scale_on_every_axis() {
+    fn a_lifted_placement_keeps_the_game_s_own_size() {
         let a = |h: u64| Node::Map(vec![("Hash".into(), Node::U64(h)), ("Translate".into(), Node::Arr(vec![Node::F32(0.0); 3]))]);
         let mut y: Byml = Byml { root: Node::Map(vec![("Actors".into(), Node::Arr(vec![a(1), a(2)]))]), version: 7, big: false };
-        assert_eq!(scale(&mut y, 2, 1.5), 1);
+        assert_eq!(raise(&mut y, 2, 0.13), 1);
         let list = y.root.get("Actors").and_then(|v| v.as_arr()).unwrap();
-        assert_eq!(list[1].get("Scale"), Some(&Node::Arr(vec![Node::F32(1.5); 3])));
-        assert_eq!(list[0].get("Scale"), None);
+        assert_eq!(list[1].get("Translate").and_then(|t| t.as_arr()).map(|t| t[1].clone()), Some(Node::F32(0.13)));
+        assert!(list.iter().all(|x| x.get("Scale").is_none()));
     }
 
     #[test]

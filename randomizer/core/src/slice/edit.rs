@@ -207,9 +207,9 @@ pub fn build_with(seed: &SeedFile, romfs: &P, load: &P, mod_name: &str, host: Ho
     let small_hearts: BS<u64> = if p.chest_sizes { crate::chest_size::small_hearts(&d, seed, &size_ctx, crate::slice::dungeon_items::credited(p.keys.map)) } else { BS::new() };
     let moves: crate::chest_size::Moves = if sizes.is_empty() { crate::chest_size::Moves::default() } else { crate::chest_size::moves(&crate::chest_size::scan(&mut rf, &sizes)?, &sizes) };
     let mut resized_n: usize = 0;
-    let lifts: BM<String, (f32, f32)> = {
+    let lifts: BM<String, f32> = {
         let info: crate::byml::Byml = rf.read_byml(crate::pickup_pack::rows::ACTOR_INFO)?;
-        ts.iter().filter(|t| extra.has(&t.new_actor)).filter_map(|t| crate::pickup_pack::lift::look_for_pack(&info, &t.new_actor).map(|l| (t.new_actor.clone(), l))).collect()
+        ts.iter().filter(|t| extra.has(&t.new_actor)).filter_map(|t| crate::pickup_pack::lift::for_pack(&info, &t.new_actor).map(|l| (t.new_actor.clone(), l))).collect()
     };
     for f in banc_files(&rf)? {
         let vanilla: Vec<u8> = rf.read_zs(&f)?;
@@ -336,7 +336,7 @@ pub fn build_with(seed: &SeedFile, romfs: &P, load: &P, mod_name: &str, host: Ho
             }
         }
     }
-    let mut staged: Stage = flow_locations::stage_merged(&mut rf, &d.flow, &flows, &gs, &FlowOpts { songs: p.songs != Songs::Off, untested: true })?;
+    let mut staged: Stage = flow_locations::stage_merged(&mut rf, &d.flow, &flows, &gs, &FlowOpts { songs: p.songs != Songs::Off, untested: true, trades: p.rewards.trade_items })?;
     crate::scrubs_b::stage_flow(&mut rf, &scrub_jobs, &mut staged.files)?;
     crate::scrub_prices::stage(&mut rf, &d, seed, p.rewards.scrub_prices, &mut staged.files)?;
     crate::merchant_prices::stage_medigoron(&mut rf, seed, p.rewards.merchant_prices, p.rewards.medigoron, &mut staged.files)?;
@@ -477,7 +477,7 @@ pub fn build_with(seed: &SeedFile, romfs: &P, load: &P, mod_name: &str, host: Ho
             }
         }
     }
-    let mut late: Vec<crate::staging::Out> = if p.qol.any() { crate::qol::worked(&mut rf, &pk, &p.qol)? } else { Vec::new() };
+    let mut late: Vec<crate::staging::Out> = if p.qol.any() || p.qol.gear_cycle { crate::qol::worked(&mut rf, &pk, &p.qol)? } else { Vec::new() };
     late.extend(crate::open_world::worked(&mut rf, &pk, &p.open)?);
     let difficulty_notes: Vec<String> = crate::difficulty::worked(&mut rf, &pk, &p.difficulty, &seed.seed, &mut late)?;
     crate::merchant_prices::stage_bean(&mut rf, seed, p.rewards.merchant_prices, p.rewards.bean_sale, &mut late)?;
@@ -570,6 +570,7 @@ pub fn build_with(seed: &SeedFile, romfs: &P, load: &P, mod_name: &str, host: Ho
     crate::starter_bags::stage(&mut rf, &mut late, &work)?;
     crate::dungeon_packs::stage(&mut rf, &mut late, &work, &crate::dungeon_packs::picked_up(&d, seed))?;
     crate::pickup_tiers::stage(&mut rf, &mut late, &work, &crate::pickup_tiers::families(&d, seed))?;
+    crate::ocarina_hold::stage(&mut rf, &mut late, &work, crate::ocarina_hold::picked_up(&d, seed))?;
     // Rooms that could lock Link in once their item is shuffled away (crate::dungeon_fixes).
     crate::dungeon_fixes::stage(&mut rf, &mut late, &work)?;
 
@@ -583,6 +584,9 @@ pub fn build_with(seed: &SeedFile, romfs: &P, load: &P, mod_name: &str, host: Ho
     crate::entr::story::stage(&mut rf, seed, &mut late, &work)?;
     crate::key_log::stage_flows(&mut rf, &mut late, &work)?;
     crate::open_world::stage_last(&mut rf, &mut late, &work)?;
+    if p.rewards.trade_items {
+        crate::open_world::trade_shuffle::stage(&mut rf, &mut late, &work)?;
+    }
     let mut debug_missed: Vec<String> = Vec::new();
     let mut paths: BS<&str> = BS::new();
     if let Some(o) = late.iter().find(|o| !paths.insert(o.path.as_str())) {
@@ -608,12 +612,13 @@ pub fn build_with(seed: &SeedFile, romfs: &P, load: &P, mod_name: &str, host: Ho
             crate::difficulty::backup::size(&mut rf, t)?;
         }
     }
-    // The merged carpenter schedules need their parsed size, not their file growth.
+    // The merged carpenter and Link the Goron schedules need their parsed size, not their file growth.
     if rst.is_none() {
         rst = Some(rsizetable::load(&mut rf)?);
     }
     if let Some(t) = rst.as_mut() {
         grown += crate::open_world::fortress::budget(&mut rf, t)?;
+        grown += crate::open_world::rolling_goron::budget(&mut rf, t)?;
     }
     extra += crate::slice::skull_kit::write(&mut rf, &pk, &mut rst, &skull_drops, kit_pool)?;
     let (cow_files, cow_lines): (usize, Vec<String>) = crate::cow_clone::write(&mut rf, &pk, &mut rst)?;
@@ -725,7 +730,7 @@ pub fn build_with(seed: &SeedFile, romfs: &P, load: &P, mod_name: &str, host: Ho
         notes.push(crate::ocarina_hold::NOTE.to_string());
     }
     if p.chest_sizes {
-        notes.push(crate::chest_size::report(resized_n + small_hearts.len(), moves.tight.len()));
+        notes.push(crate::chest_size::report(resized_n + small_hearts.len()));
     }
     if p.world.on() && !seed.placements.keys().any(|k| pu::listed(&d, k)) {
         notes.retain(|n| !pu::is_note(n));
@@ -1025,7 +1030,7 @@ mod tests {
                 match (t.family, d.family(&t.new_item)) {
                     (Some(f), _) => {
                         seen.insert(f);
-                        assert_eq!(t.new_actor, crate::slice::chest_targets::view_drop(f, views.get(&t.name).map(|s| s.as_str())).unwrap());
+                        assert_eq!(t.new_actor, crate::slice::chest_targets::chest_drop(f, views.get(&t.name).map(|s| s.as_str())).unwrap());
                         assert!(
                             !needs_every_holder(f) || d.holders(f).iter().all(|h| g.seed_file.placements.contains_key(*h) || d.wrappable(h)),
                             "{f}"
@@ -1107,7 +1112,7 @@ mod tests {
             // so a name no game flow hands out is listed as untested instead of refused.
             let songs: bool = plan(&st, None).unwrap().songs != Songs::Off;
             let (_, _, untested): (Vec<crate::flow_locations::Change>, usize, Vec<String>) =
-                crate::flow_locations::plan(&d.flow, &flows, &FlowOpts { songs, untested: true }).unwrap_or_else(|e| panic!("seed split {n}: {e}"));
+                crate::flow_locations::plan(&d.flow, &flows, &FlowOpts { songs, untested: true, trades: plan(&st, None).unwrap().rewards.trade_items }).unwrap_or_else(|e| panic!("seed split {n}: {e}"));
             for c in &flows {
                 // Reward events hand out any item a chest gives, through its chest content actor (#24).
                 let allowed: bool = g.seed_file.placements.get(&c.location).and_then(|it| d.item(it)).is_some_and(|i| crate::slice::flow_rules::allows(&d, &c.location, i) || crate::slice::flow_rules::linked(i, &c.item));

@@ -331,6 +331,9 @@ impl Plan {
         out.extend(self.qol.logic());
         out.extend(self.open.logic());
         out.extend(crate::open_world::trade::LOGIC);
+        if self.rewards.trade_items {
+            out.push(crate::open_world::trade_shuffle::LOGIC);
+        }
         out.extend(self.trials.logic());
         if self.skulls != crate::slice::skulls::Mode::Off {
             out.push((crate::slice::skull_rules::KEY, crate::slice::skull_rules::ON));
@@ -537,7 +540,8 @@ pub fn plan_with_seed(s: &Settings, seed: Option<&str>) -> Res<Plan> {
         (endings, crate::story_skip::NOTE_ENDINGS),
         (hints, "Gossip stones give hints. Their text is replaced in every language."),
         (rewards.extra, "Kak 20 Gold Skulltula Reward, DMT Biggoron and GC Medigoron are shuffled with structural event edits."),
-        (rewards.trade, "The ten adult trade quest hand ins each give one extra shuffled item the first time. The trade items themselves stay in their chain."),
+        (rewards.trade && !rewards.trade_items, "The ten adult trade quest hand ins each give one extra shuffled item the first time. The trade items themselves stay in their chain."),
+        (rewards.trade_items, crate::open_world::trade_shuffle::NOTE),
         (rewards.cows, crate::flow_extra::cows::NOTE),
         (rewards.cows_other, crate::flow_extra::cows::NOTE_OTHER),
         (rewards.frog_songs, crate::flow_extra::frogs::SONGS_NOTE),
@@ -638,7 +642,8 @@ mod tests {
         assert_eq!(p.keys.map, Keep::Dungeon);
         assert!(p.intro);
         assert!(p.story && p.endings);
-        assert_eq!(p.notes.len(), 23);
+        assert_eq!(p.notes.len(), 24);
+        assert!(p.notes.iter().any(|n| n == crate::qol::gear_cycle::NOTE), "the gear cycle is always on");
         assert!(p.short && p.notes.iter().any(|n| n == crate::short_get::NOTE));
         assert!(!p.notes.iter().any(|n| n == crate::deku_bridge::NOTE));
         assert!(p.remake && p.hearts && p.rewards.extra);

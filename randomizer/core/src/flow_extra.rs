@@ -56,6 +56,8 @@ pub struct Rewards {
     pub dungeon_own: bool,
     pub extra: bool,
     pub trade: bool,
+    /// Every adult trade item is its own shuffled item (crate::open_world::trade_shuffle).
+    pub trade_items: bool,
     pub cows: bool,
     pub cows_other: bool,
     pub frog_songs: bool,
@@ -102,6 +104,7 @@ impl Rewards {
         };
         let extra: bool = on && toggle(s, SETTING, bad);
         let trade: bool = on && toggle(s, trade::SETTING, bad);
+        let trade_items: bool = trade && toggle(s, crate::open_world::trade_shuffle::SETTING, bad);
         let cows: bool = on && toggle(s, cows::SETTING, bad);
         let frog_songs: bool = on && toggle(s, frogs::SONGS_SETTING, bad);
         let frog_bug: bool = on && toggle(s, frogs::BUG_SETTING, bad);
@@ -115,6 +118,7 @@ impl Rewards {
             dungeon_own,
             extra,
             trade,
+            trade_items,
             cows,
             cows_other: cows,
             frog_songs,

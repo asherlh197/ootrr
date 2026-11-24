@@ -4,8 +4,10 @@ pub mod fortress;
 pub mod gerudo;
 pub mod guard;
 pub mod quest_order;
+pub mod rolling_goron;
 pub mod skips;
 pub mod trade;
+pub mod trade_shuffle;
 pub mod zora_tunic;
 
 use std::fs;
@@ -315,6 +317,7 @@ pub fn worked(rf: &mut Romfs, pk: &crate::modpack::Pack, o: &Opts) -> Res<Vec<Ou
     let mut outs: Vec<Out> = if o.edits_files() { stage(rf, o, &have)? } else { Vec::new() };
     outs.extend(crate::gerudo_card::stage(rf, &have)?);
     fortress::stage(rf, &mut outs, &have)?;
+    rolling_goron::stage(rf, &mut outs, &have)?;
     outs.push(crate::malon_song::stage(rf, &have)?);
     Ok(outs)
 }

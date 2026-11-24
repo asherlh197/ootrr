@@ -69,6 +69,7 @@ pub struct Layers {
     /// turning item model clears the ground (crate::pickup_pack::lift). The pack builds fill it in.
     pub lift: u32,
     pub own: bool,
+    pub pose: Option<String>,
 }
 
 impl Layers {

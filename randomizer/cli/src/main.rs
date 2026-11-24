@@ -78,7 +78,8 @@ const USAGE: &str = "usage:
   ootrr flow-scale <romfs_root> <load_dir> <mod_name> <factor> <min_frames> <relative_path>...
   ootrr flow-force <romfs_root> <load_dir> <mod_name> <relative_path> <event_name> <case_value> [<event_name> <case_value>]...
   ootrr intro-skip <romfs_root> <load_dir> <mod_name> [--movie-only | --scene-only | --hold | --hold-and-scene]
-  ootrr qol-mod <romfs_root> <load_dir> <mod_name> <skip-story | skip-all | anju | poe | navi-dungeons | navi-everywhere | bunny-speed | bunny-jump | big-chest-anim | owl-warps>
+  ootrr qol-mod <romfs_root> <load_dir> <mod_name> <skip-story | skip-all | anju | poe | navi-dungeons | navi-everywhere | bunny-speed | bunny-jump | big-chest-anim | owl-warps | gear-cycle>
+  ootrr gear-probe <romfs_root> <out_dir> [seed_player_pack.zs]...
   ootrr door-fix <romfs_root> <load_dir> <mod_name>
   ootrr door-open <romfs_root> <load_dir> <mod_name>
   ootrr deku-bridge-testmod <romfs_root> <load_dir> <mod_name>
@@ -362,6 +363,7 @@ fn main() -> ExitCode {
         Some("flow-scale") => check_bfevfl::scale(&a[1..]),
         Some("intro-skip") => intro_cmd::run(&a[1..]),
         Some("qol-mod") => qol_cmd::run(&a[1..]),
+        Some("gear-probe") => qol_cmd::gear_probe(&a[1..]),
         Some("door-fix") => door_fix_cmd::run(&a[1..]),
         Some("door-open") => door_open_cmd::run(&a[1..]),
         Some("deku-bridge-testmod") => deku_bridge_cmd::testmod(&a[1..]),

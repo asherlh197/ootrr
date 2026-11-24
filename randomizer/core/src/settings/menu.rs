@@ -218,7 +218,7 @@ const JABU: View = View {
 const CARPENTERS: View = View {
     id: "gerudo_fortress",
     label: "Fortress Carpenters",
-    tip: "Sets the state of the carpenters captured by Gerudo in Gerudo Fortress, and with it the number of guards that spawn.\n\nNormal - All 4 carpenters are required to be saved.\n\nFast - Tested in game. Three carpenters start free. The Membership Card is vanilla and is granted when the last carpenter is rescued.\n\nOpen - Tested in game. Start with the Gerudo Membership Card and the bridge built. The Membership Card check is still in the game and randomized. It triggers when you interact with your first jail cell.\n\nOnly \"Open\" is compatible with shuffled Gerudo Fortress Keys.",
+    tip: "Sets the state of the carpenters captured by Gerudo in Gerudo Fortress, and with it the number of guards that spawn.\n\nNormal - All 4 carpenters are required to be saved.\n\nFast - Tested in game. Three carpenters start free. The guard gives the Membership Card check when the last carpenter is rescued: the card itself, or a random item when Shuffle Gerudo Membership Card is on.\n\nOpen - Tested in game. Start with the Gerudo Membership Card and the bridge built. The Membership Card check is still in the game and randomized. It triggers when you interact with your first jail cell.\n\nOnly \"Open\" is compatible with shuffled Gerudo Fortress Keys and the Hideout Key Ring.",
     kind: Kind::Pick,
     opts: &[
         yes("Normal", "normal"),
@@ -347,10 +347,11 @@ pub const MOVED: &[(&str, &[PortSection])] = &[
 ];
 
 /// A warning shown at the top of a page, above its settings.
-pub const WARNINGS: &[(&str, &str)] = &[(
-    "experimental",
-    "These settings have known unexpected behavior that could lead to many seeds being unbeatable and other minor bugs.",
-)];
+pub const WARNINGS: &[(&str, &str)] = &[("experimental", UNSTABLE), ("difficulty", UNSTABLE)];
+
+pub const UNSTABLE: &str = "These settings have known unexpected behavior that could lead to many seeds being unbeatable and other minor bugs.";
+
+pub const HIDDEN: &[&str] = &["enemy_randomizer"];
 
 const LOGIC: PortSection = port(
                 "Logic",
@@ -368,6 +369,7 @@ const LOGIC: PortSection = port(
                     gray_check("Full Wallets", "Start with a full wallet. All wallet upgrades come filled with rupees."),
                     Entry::View(&PLANT_BEANS),
                     Entry::View(&EPONA),
+                    Entry::Plain("night_skulls_suns_song"),
                     Entry::Hidden("bombchus_in_logic"),
                     Entry::Plain("nocturne_trigger"),
                     Entry::Plain("prelude_trigger"),
@@ -646,6 +648,7 @@ const LOCATIONS_TAB: &[PortSection] = &[
             Entry::Plain("song_harp_colors"),
             Entry::Plain("shuffle_ocarinas"),
             Entry::Plain("shuffle_kokiri_sword"),
+            Entry::Plain("shuffle_gerudo_card"),
             Entry::View(&SKULLTULAS),
             Entry::View(&FREESTANDING),
         ],
@@ -671,6 +674,7 @@ const LOCATIONS_TAB: &[PortSection] = &[
             Entry::Plain("shuffle_treasure_reward"),
             Entry::Plain("shuffle_potion_shop"),
             Entry::Plain("shuffle_trade_checks"),
+            Entry::Plain("adult_trade_shuffle"),
             Entry::View(&COWS),
             Entry::Plain("shuffle_frog_songs"),
             Entry::Plain("shuffle_frog_bug_heart"),
@@ -778,15 +782,6 @@ pub const MENU: &[Page] = &[
             &[crate::key_rings::SETTING, crate::key_rings::MODE_SETTING, crate::key_rings::COUNT_SETTING, crate::key_rings::SELECTION_SETTING, crate::key_rings::HIDEOUT_SETTING],
         )],
     },
-    Page {
-        id: "qol_bundle",
-        label: "Time savers",
-        heading: IN_DEV,
-        sections: &[
-            sec("Gold Skulltulas", &["night_skulls_suns_song"]),
-        ],
-    },
-    Page { id: "gerudo_card", label: "Gerudo Membership Card", heading: IN_DEV, sections: &[sec("Shuffle", &["shuffle_gerudo_card"])] },
     Page { id: "cosmetics", label: "Cosmetics", heading: GAMEPLAY, sections: &[sec("Looks", &["mega_like_likes"])] },
     Page { id: "debug", label: "Debug", heading: DEBUG, sections: &[sec("Debug", &["debug_location_names"]), sec("Spawn enemies", &["enemy_spawn_combo"])] },
 ];
@@ -851,9 +846,11 @@ pub fn menu_json(sch: &Schema) -> Json {
             None => Vec::new(),
         };
         for s in p.sections {
-            let ids: Vec<&str> = s.ids.iter().copied().filter(|x| have.contains(x) && placed.insert(x)).collect();
+            let all: Vec<&str> = s.ids.iter().copied().filter(|x| have.contains(x) && placed.insert(x)).collect();
+            let (hidden, ids): (Vec<&str>, Vec<&str>) = all.into_iter().partition(|x| HIDDEN.contains(x));
             if !ids.is_empty() {
-                secs.push(Json::obj().with("label", s.label.into()).with("ids", Json::strs(ids.into_iter())));
+                let j: Json = Json::obj().with("label", s.label.into()).with("ids", Json::strs(ids.into_iter()));
+                secs.push(if hidden.is_empty() { j } else { j.with("hidden", Json::strs(hidden.into_iter())) });
             }
         }
         if !secs.is_empty() {

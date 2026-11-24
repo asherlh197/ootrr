@@ -199,12 +199,12 @@ mod tests {
             let (back, same, _): (Vec<Change>, usize, Vec<String>) = plan(&d, &[Choice { location: h.loc.to_string(), item: h.gives.to_string() }], &Opts::default()).unwrap();
             assert!(back.is_empty() && same == 1, "{}", h.loc);
             for a in ACTORS.iter().filter(|a| **a != h.gives) {
-                let o: Opts = Opts { untested: true, songs: false };
+                let o: Opts = Opts { untested: true, songs: false, trades: false };
                 assert!(plan(&d, &[Choice { location: h.loc.to_string(), item: a.to_string() }], &o).is_err(), "{} {a}", h.loc);
             }
         }
         assert!(plan(&d, &[Choice { location: "HC Malon Egg".to_string(), item: "Item_Prescription".to_string() }], &Opts::default()).is_err());
-        let o: Opts = Opts { untested: true, songs: false };
+        let o: Opts = Opts { untested: true, songs: false, trades: false };
         assert!(plan(&d, &[Choice { location: "HC Malon Egg".to_string(), item: "Item_Prescription".to_string() }], &o).is_ok());
         let (ch, _, _): (Vec<Change>, usize, Vec<String>) = plan(&d, &[Choice { location: "HC Malon Egg".to_string(), item: "Item_WeirdEgg".to_string() }], &Opts::default()).unwrap();
         assert!(ch.is_empty());

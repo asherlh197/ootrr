@@ -228,7 +228,13 @@ pub fn wrap(f: &mut Flow, family: &str) -> Res<()> {
     let (a, q) = ensure_query(f)?;
     let mut subs: Vec<u16> = Vec::new();
     for x in t {
-        subs.push(give(f, x)?);
+        let form: String = crate::ocarina_hold::chest_form(x);
+        let at: u16 = give(f, &form)?;
+        if form != *x {
+            let added: u16 = crate::ocarina_hold::after(f, x, NONE)?;
+            set_next(&mut f.events[usize::from(at)].kind, added)?;
+        }
+        subs.push(at);
     }
     let root: Kind = chain(f, a, q, family, o, &subs)?;
     let main: u16 = push(f, root)?;
@@ -821,6 +827,28 @@ mod tests {
         assert_eq!((*actor, *query), (1, 1));
         assert_eq!(cases, &vec![Case { val: 0, ev: 1 }, Case { val: 1, ev: 0 }]);
         assert_eq!(params.as_ref().and_then(|c| c.get("ActorName")), Some(&Val::Str("Item_Hookshot".to_string())));
+    }
+
+    #[test]
+    fn an_ocarina_chest_hands_out_the_pickup_then_adds_and_equips_the_tier() {
+        let mut f: Flow = flow();
+        wrap(&mut f, "Ocarina").unwrap();
+        let e: &Entry = f.entries.iter().find(|e| e.name == "Success_Prog_Ocarina").unwrap();
+        for (sub, (form, tier)) in e.subs.iter().zip([("Obj_Ocarina_Fairy", "Item_Ocarina_Fairy"), ("Obj_Ocarina_TimeLand", "Item_Ocarina_Time")]) {
+            let Kind::Sub { next, params, .. } = &f.events[usize::from(*sub)].kind else {
+                panic!("expected the Success_ call");
+            };
+            assert_eq!(params.as_ref().and_then(|c| c.get("ContentName")), Some(&Val::Str(form.to_string())));
+            let add = &f.events[usize::from(*next)].kind;
+            assert_eq!(add.params().and_then(|c| c.get("Actor")), Some(&Val::Str(tier.to_string())));
+            let Kind::Action { next: equip, .. } = add else {
+                panic!("expected the pouch add");
+            };
+            let eq = &f.events[usize::from(*equip)].kind;
+            assert_eq!(eq.params().and_then(|c| c.get("GameDataName")), Some(&Val::Str(crate::ocarina_hold::EQUIP.to_string())));
+            assert_eq!(eq.params().and_then(|c| c.get("Value")), Some(&Val::Str(tier.to_string())));
+            assert!(matches!(eq, Kind::Action { next: NONE, .. }));
+        }
     }
 
     #[test]

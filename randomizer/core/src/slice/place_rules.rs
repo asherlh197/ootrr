@@ -66,8 +66,12 @@ fn hideout_key(s: &Spot) -> Option<bool> {
     Some(place && i.dungeon.is_some() && (chest || gift))
 }
 
-/// The adult trade chain keeps its items at home: the sequence is not shuffled.
+/// The adult trade chain keeps its items at home: the sequence is not shuffled, unless adult trade
+/// shuffle makes each trade item its own item (crate::open_world::trade_shuffle).
 fn adult_trade(s: &Spot) -> Option<bool> {
+    if s.p.rewards.trade_items {
+        return None;
+    }
     let child: [&str; 2] = ["Item_WeirdEgg", "Item_ZeldaLetter"];
     s.d.item(s.item)
         .filter(|i| i.actor.as_deref().is_some_and(|a| crate::flow_extra::trade::chain(a) && !child.contains(&a)))
@@ -97,7 +101,58 @@ fn end_of_dungeons(s: &Spot) -> Option<bool> {
 }
 
 fn excluded(s: &Spot) -> Option<bool> {
-    (!s.p.excluded.is_empty() && s.w.items.adv[s.it] && s.p.excluded.iter().any(|e| *e == s.name)).then_some(false)
+    (!s.p.excluded.is_empty() && s.p.excluded.iter().any(|e| *e == s.name) && !junk(s.d, s.item)).then_some(false)
+}
+
+pub const JUNK: [&str; 17] = [
+    "Rupee (1)",
+    "Rupees (5)",
+    "Rupees (20)",
+    "Bomb (1)",
+    "Bombs (5)",
+    "Bombs (10)",
+    "Bombs (20)",
+    "Arrows (5)",
+    "Arrows (10)",
+    "Arrows (30)",
+    "Deku Nuts (5)",
+    "Deku Nuts (10)",
+    "Deku Stick (1)",
+    "Deku Sticks (3)",
+    "Deku Seeds (30)",
+    "Recovery Heart",
+    "Magic Jar (Large)",
+];
+
+pub fn junk(d: &Data, item: &str) -> bool {
+    JUNK.contains(&item) || d.item(item).is_some_and(|i| !i.adv && i.kind == "Shop" && item != "Sold Out")
+}
+
+pub const LOW_JUNK: [(&str, u64); 8] = [
+    ("Rupee (1)", 35),
+    ("Rupees (5)", 35),
+    ("Arrows (5)", 6),
+    ("Arrows (10)", 4),
+    ("Bombs (5)", 6),
+    ("Deku Nuts (5)", 5),
+    ("Deku Sticks (3)", 5),
+    ("Deku Seeds (30)", 4),
+];
+
+pub fn roll_low_junk(w: &World, l: LocId, ok: &dyn Fn(ItemId, LocId) -> bool, rng: &mut crate::rng::Rng) -> Option<ItemId> {
+    let cands: Vec<(ItemId, u64)> = LOW_JUNK.iter().filter_map(|(n, wt)| w.item(n).filter(|i| ok(*i, l)).map(|i| (i, *wt))).collect();
+    let total: u64 = cands.iter().map(|c| c.1).sum();
+    if total == 0 {
+        return None;
+    }
+    let mut r: u64 = rng.below(total);
+    for (i, wt) in cands {
+        if r < wt {
+            return Some(i);
+        }
+        r -= wt;
+    }
+    None
 }
 
 fn silver(s: &Spot) -> Option<bool> {

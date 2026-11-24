@@ -1791,6 +1791,10 @@ pub fn stage_sun_give(rf: &mut Romfs, late: &mut Vec<Out>, work: &std::path::Pat
     stage_late(rf, late, work, crate::flow_extra::sun::FLOW, |b| patch_sun_give(b, g))
 }
 
+/// The winning spin still plays the pot's Heart Piece scene (cut by patch_goron_pot_scene to
+/// the roulette and the camera reset, which stop the pot and end its spin; without them the pot
+/// kept spinning, ignored bombs and the HUD never came back). After the scene, the placed item
+/// is given once, while the drop flag is still unset.
 pub fn patch_goron_pot_give(b: &mut Bf, g: &SceneGive) -> Res<()> {
     use crate::bfevfl::Case;
     use crate::flow_extra::goron_pot as pot;
@@ -1809,16 +1813,48 @@ pub fn patch_goron_pot_give(b: &mut Bf, g: &SceneGive) -> Res<()> {
     let after: u16 = chain(f, "OOTRRPotTaken", vec![taken], dropped)?;
     let give: u16 = item_get(f, "OOTRRPotGive", g, after, &[pot::ENTRY])?;
     let (a, q): (u16, u16) = crate::start_state::query_slot(f, DATA_ACTOR, "EventQueryIsGameDataBool")?;
-    f.events[scene].kind = Kind::Switch {
-        actor: a,
-        query: q,
-        cases: vec![Case { val: 0, ev: NONE }, Case { val: 1, ev: give }],
-        params: Some(Cont { items: vec![item("GameDataName", Val::Str(pot::DROPPED.to_string())), item("Index", Val::Int(-1))] }),
+    let check: u16 = idx(f.events.len())?;
+    // Case 0 is true: the item was already given.
+    f.events.push(Event {
+        name: "OOTRRPotCheck".to_string(),
+        kind: Kind::Switch {
+            actor: a,
+            query: q,
+            cases: vec![Case { val: 0, ev: NONE }, Case { val: 1, ev: give }],
+            params: Some(Cont { items: vec![item("GameDataName", Val::Str(pot::DROPPED.to_string())), item("Index", Val::Int(-1))] }),
+        },
+    });
+    set_next(&mut f.events[scene].kind, check)
+}
+
+/// Cuts the Heart Piece out of the pot's win scene: the roulette (which stops the pot on its face
+/// and resets its prize holder) runs straight into the after-drop camera reset, so the pot never
+/// lets the vanilla Heart Piece out of its holder slot.
+pub fn patch_goron_pot_scene(b: &mut Bf) -> Res<()> {
+    use crate::flow_extra::goron_pot as pot;
+    let f: &mut Flow = flow_mut(b, pot::SCENE)?;
+    let sub = |f: &Flow, entry: &str| -> Res<usize> {
+        let hits: Vec<usize> = (0..f.events.len()).filter(|&i| matches!(&f.events[i].kind, Kind::Sub { flow, entry: e, .. } if flow == pot::ROULETTE_FLOW && e == entry)).collect();
+        match hits.as_slice() {
+            [i] => Ok(*i),
+            _ => Err(Error::Msg(format!("goron pot: expected one {}:{entry} in {}, found {}", pot::ROULETTE_FLOW, pot::SCENE, hits.len()))),
+        }
     };
-    Ok(())
+    let roulette: usize = sub(f, "RoulettePot")?;
+    let after: usize = sub(f, "AfterDrop")?;
+    let to: u16 = idx(after)?;
+    if next_of(&f.events[roulette].kind) == Some(to) {
+        return Err(Error::Msg(format!("goron pot: {} was already patched", pot::SCENE)));
+    }
+    if !(0..f.events.len()).any(|i| action(f, i).as_deref() == Some(pot::DROP_PRIZE)) {
+        return Err(Error::Msg(format!("goron pot: {} no longer drops the Heart Piece", pot::SCENE)));
+    }
+    set_next(&mut f.events[roulette].kind, to)?;
+    set_next(&mut f.events[after].kind, NONE)
 }
 
 pub fn stage_goron_pot_give(rf: &mut Romfs, late: &mut Vec<Out>, work: &std::path::Path, g: &SceneGive) -> Res<()> {
+    stage_late(rf, late, work, crate::flow_extra::goron_pot::SCENE, patch_goron_pot_scene)?;
     stage_late(rf, late, work, crate::flow_extra::goron_pot::FLOW, |b| patch_goron_pot_give(b, g))
 }
 
@@ -2331,7 +2367,7 @@ mod tests {
     }
 
     #[test]
-    fn the_goron_pot_win_gives_the_placed_item_once_instead_of_the_heart_piece_scene() {
+    fn the_goron_pot_win_plays_the_scene_then_gives_the_placed_item_once() {
         use crate::bfevfl::Case;
         use crate::flow_extra::goron_pot as pot;
         let Some(root) = dump() else { return };
@@ -2341,8 +2377,11 @@ mod tests {
         patch_goron_pot_give(&mut b, &g).unwrap();
         let b: Bf = Bf::parse(&b.write().unwrap()).unwrap();
         let f: &Flow = b.flows.iter().find(|x| x.name == pot::FLOW).unwrap();
-        assert!(!f.events.iter().any(|e| text(e, "EventName") == Some(pot::SCENE)));
-        let switch: &Event = f.events.iter().find(|e| matches!(e.kind, Kind::Switch { .. }) && text(e, "GameDataName") == Some(pot::DROPPED)).unwrap();
+        // The scene still plays (it stops the pot and ends its spin), and the check follows it.
+        let scene: &Event = f.events.iter().find(|e| text(e, "EventName") == Some(pot::SCENE)).unwrap();
+        let check: u16 = next_of(&scene.kind).unwrap();
+        let switch: &Event = &f.events[check as usize];
+        assert!(matches!(switch.kind, Kind::Switch { .. }) && text(switch, "GameDataName") == Some(pot::DROPPED), "{switch:?}");
         let Kind::Switch { cases, .. } = &switch.kind else { unreachable!() };
         assert!(cases.contains(&Case { val: 0, ev: NONE }));
         let give: u16 = cases.iter().find(|c| c.val == 1).unwrap().ev;
@@ -2363,6 +2402,41 @@ mod tests {
         assert!(entry.subs.contains(&give));
         let mut again: Bf = b.clone();
         assert!(patch_goron_pot_give(&mut again, &g).is_err());
+    }
+
+    #[test]
+    fn the_goron_pot_scene_keeps_the_roulette_but_never_drops_the_heart_piece() {
+        use crate::flow_extra::goron_pot as pot;
+        let Some(root) = dump() else { return };
+        let mut rf: Romfs = Romfs::open(&root).unwrap();
+        let mut b: Bf = Bf::parse(&rf.read_zs(&format!("Event/EventFlow/{}.bfevfl.zs", pot::SCENE)).unwrap()).unwrap();
+        patch_goron_pot_scene(&mut b).unwrap();
+        let b: Bf = Bf::parse(&b.write().unwrap()).unwrap();
+        let f: &Flow = b.flows.iter().find(|x| x.name == pot::SCENE).unwrap();
+        let mut seen: Vec<bool> = vec![false; f.events.len()];
+        let mut todo: Vec<u16> = f.entries.iter().map(|e| e.main).collect();
+        while let Some(at) = todo.pop() {
+            if at == NONE || seen[at as usize] {
+                continue;
+            }
+            seen[at as usize] = true;
+            match &f.events[at as usize].kind {
+                Kind::Switch { cases, .. } => todo.extend(cases.iter().map(|c| c.ev)),
+                Kind::Fork { forks, join } => {
+                    todo.extend(forks.iter().copied());
+                    todo.push(*join);
+                }
+                k => todo.extend(next_of(k)),
+            }
+        }
+        let runs = |want: &dyn Fn(usize) -> bool| (0..f.events.len()).any(|i| seen[i] && want(i));
+        let sub = |i: usize, entry: &str| matches!(&f.events[i].kind, Kind::Sub { flow, entry: e, .. } if flow == pot::ROULETTE_FLOW && e == entry);
+        assert!(runs(&|i| sub(i, "RoulettePot")));
+        assert!(runs(&|i| sub(i, "AfterDrop")));
+        assert!(!runs(&|i| action(f, i).as_deref() == Some(pot::DROP_PRIZE)));
+        assert!(!runs(&|i| action(f, i).is_some_and(|a| a.starts_with("Obj_Heart_Piece."))));
+        let mut again: Bf = b.clone();
+        assert!(patch_goron_pot_scene(&mut again).is_err());
     }
 
     #[test]

@@ -4,6 +4,7 @@ pub mod chest_anim;
 pub mod dampe_dig;
 pub mod dampe_race;
 pub mod fishing;
+pub mod gear_cycle;
 pub mod night_skulls;
 pub mod scarecrow;
 pub mod skull_kid_session;
@@ -55,6 +56,7 @@ pub struct Opts {
     pub fast_session: bool,
     pub one_race: bool,
     pub first_dig: bool,
+    pub gear_cycle: bool,
 }
 
 pub type Have<'a> = &'a dyn Fn(&str) -> Option<Vec<u8>>;
@@ -137,6 +139,9 @@ impl Opts {
         if self.first_dig {
             out.push(dampe_dig::NOTE.to_string());
         }
+        if self.gear_cycle {
+            out.push(gear_cycle::NOTE.to_string());
+        }
         out
     }
 
@@ -177,6 +182,7 @@ pub fn read(s: &Settings, bad: &mut Vec<String>) -> Opts {
     let fast_session: bool = true;
     let one_race: bool = true;
     let first_dig: bool = true;
+    let gear_cycle: bool = true;
     let navi: navi_return::Mode = match s.text(NAVI) {
         Ok("off") => navi_return::Mode::Off,
         Ok("dungeons") => navi_return::Mode::Dungeons,
@@ -203,7 +209,7 @@ pub fn read(s: &Settings, bad: &mut Vec<String>) -> Opts {
             bunny::Mode::Off
         }
     };
-    Opts { skip, anju, poe, navi, bunny, big_chests, blocks, owls, suns_skulls, any_fish, free_scarecrow, skip_escape, fast_session, one_race, first_dig }
+    Opts { skip, anju, poe, navi, bunny, big_chests, blocks, owls, suns_skulls, any_fish, free_scarecrow, skip_escape, fast_session, one_race, first_dig, gear_cycle }
 }
 
 pub fn settings() -> Vec<crate::settings::Setting> {
@@ -274,11 +280,34 @@ pub fn stage(rf: &mut Romfs, o: &Opts, have: Have) -> Res<Vec<Out>> {
     if o.owls {
         owl::stage(rf, have, &mut outs)?;
     }
+    if o.gear_cycle {
+        outs.extend(gear_cycle::stage(rf, have)?);
+        // On top of the Bunny Hood edit when that option changed the same packs.
+        for (file, _) in bunny::PACKS {
+            stack(rf, &mut outs, have, file, gear_cycle::patch_boots_hop)?;
+        }
+    }
     Ok(outs)
 }
 
+/// Edits `path` on top of an earlier edit of it in `outs`, keeping that edit's original size
+/// for the size table, or on top of the worked or game file when nothing edited it yet.
+fn stack(rf: &mut Romfs, outs: &mut Vec<Out>, have: Have, path: &str, f: impl FnOnce(&[u8]) -> Res<Vec<u8>>) -> Res<()> {
+    match outs.iter().position(|o| o.path == path) {
+        Some(i) => {
+            let id: Option<u32> = dict_id(&outs[i].z);
+            let raw: Vec<u8> = rf.zs.decompress(&outs[i].z)?;
+            let b: Vec<u8> = f(&raw)?;
+            outs[i].new = b.len();
+            outs[i].z = zs::compress_raw(&b, id)?;
+        }
+        None => outs.push(edit_zs(rf, have, path, f)?),
+    }
+    Ok(())
+}
+
 pub fn build(romfs: &P, load: &P, name: &str, o: &Opts) -> Res<String> {
-    if !o.any() {
+    if !o.any() && !o.gear_cycle {
         return Err(Error::Format("qol: nothing selected"));
     }
     let mut rf: Romfs = Romfs::open(romfs)?;
@@ -299,10 +328,10 @@ mod tests {
     use crate::settings::Value;
 
     fn always() -> Opts {
-        Opts { any_fish: true, fast_session: true, one_race: true, first_dig: true, ..Opts::default() }
+        Opts { any_fish: true, fast_session: true, one_race: true, first_dig: true, gear_cycle: true, ..Opts::default() }
     }
 
-    const ALWAYS_NOTES: usize = 4;
+    const ALWAYS_NOTES: usize = 5;
 
     /// The defaults with Return with Navi off, the one option on by default.
     fn quiet() -> Settings {
@@ -457,17 +486,50 @@ mod tests {
     }
 
     #[test]
+    fn the_boots_hop_edit_stacks_on_the_bunny_hood_edit() {
+        let Some(root) = dump() else {
+            return;
+        };
+        let mut rf: Romfs = Romfs::open(&root).unwrap();
+        let o: Opts = Opts { bunny: bunny::Mode::Speed, ..always() };
+        let outs: Vec<Out> = stage(&mut rf, &o, &|_: &str| None).unwrap();
+        for p in [bunny::FILE, bunny::ADULT_FILE] {
+            let hits: Vec<&Out> = outs.iter().filter(|x| x.path == p).collect();
+            assert_eq!(hits.len(), 1, "{p} is staged once");
+            let es: Vec<crate::sarc::Entry> = crate::sarc::parse(&rf.zs.decompress(&hits[0].z).unwrap()).unwrap();
+            let game: Vec<u8> = rf.read_zs(p).unwrap();
+            let bunny_only: Vec<crate::sarc::Entry> = crate::sarc::parse(&bunny::patch_pack(&game, bunny::Mode::Speed).unwrap()).unwrap();
+            let hop_only: Vec<crate::sarc::Entry> = crate::sarc::parse(&gear_cycle::patch_boots_hop(&game).unwrap()).unwrap();
+            assert_eq!(crate::sarc::get(&es, bunny::WALK.file).unwrap().data, crate::sarc::get(&bunny_only, bunny::WALK.file).unwrap().data, "{p} keeps the Bunny Hood edit");
+            assert_eq!(crate::sarc::get(&es, gear_cycle::SCHEDULER).unwrap().data, crate::sarc::get(&hop_only, gear_cycle::SCHEDULER).unwrap().data, "{p} drops the hop");
+            assert_eq!(hits[0].old, game.len(), "{p} keeps the game size for the size table");
+        }
+        assert!(outs.iter().any(|x| x.path == gear_cycle::COUNTER_FILE));
+    }
+
+    #[test]
     fn default_builds_write_none_of_the_option_files() {
         let Some(root) = dump() else {
             return;
         };
         let out: std::path::PathBuf = built(&root, &with(&[("shuffle_rewards", Value::s("off")), (NAVI, Value::s("off"))]), "qol default", "OOTRR Qol Default Test");
-        for f in files().into_iter().filter(|f| !chest_anim::files().contains(&f.as_str())) {
+        let mut rf: Romfs = Romfs::open(&root).unwrap();
+        // The gear cycle is always on: the player packs always lose the boots-change hop, and
+        // nothing else in them changes without the Bunny Hood option.
+        let packs: [&str; 2] = [bunny::FILE, bunny::ADULT_FILE];
+        for f in files().into_iter().filter(|f| !chest_anim::files().contains(&f.as_str()) && !packs.contains(&f.as_str())) {
             assert!(!at(&out, &f).exists(), "{f}");
         }
+        for p in packs {
+            let built: Vec<crate::sarc::Entry> = crate::sarc::parse(&rf.zs.decompress(&std::fs::read(at(&out, p)).unwrap()).unwrap()).unwrap();
+            let game: Vec<crate::sarc::Entry> = crate::sarc::parse(&rf.read_zs(p).unwrap()).unwrap();
+            let hop: Vec<u8> = gear_cycle::patch_boots_hop(&rf.read_zs(p).unwrap()).unwrap();
+            let want: Vec<crate::sarc::Entry> = crate::sarc::parse(&hop).unwrap();
+            assert_eq!(crate::sarc::get(&built, gear_cycle::SCHEDULER).unwrap().data, crate::sarc::get(&want, gear_cycle::SCHEDULER).unwrap().data, "{p}");
+            assert_eq!(crate::sarc::get(&built, bunny::WALK.file).unwrap().data, crate::sarc::get(&game, bunny::WALK.file).unwrap().data, "{p}");
+        }
         let out: std::path::PathBuf = built(&root, &with(&[(NAVI, Value::s("off"))]), "qol default", "OOTRR Qol Rewards Default Test");
-        let mut rf: Romfs = Romfs::open(&root).unwrap();
-        for f in files() {
+        for f in files().into_iter().filter(|f| !packs.contains(&f.as_str())) {
             if f == poe::FILE && at(&out, &f).is_file() {
                 let z: Vec<u8> = std::fs::read(at(&out, &f)).unwrap();
                 let b: crate::bfevfl::Bf = crate::bfevfl::Bf::parse(&rf.zs.decompress(&z).unwrap()).unwrap();

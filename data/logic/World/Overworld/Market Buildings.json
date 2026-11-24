@@ -157,14 +157,14 @@
         "region_name": "Market Potion Shop",
         "scene": "Market Potion Shop",
         "locations": {
-            "Market Potion Shop Left Side Top Right": "'Zelda Met'",
-            "Market Potion Shop Right Side Top Left": "'Zelda Met'",
-            "Market Potion Shop Left Side Top Left": "'Zelda Met'",
-            "Market Potion Shop Left Side Bottom Right": "'Zelda Met'",
-            "Market Potion Shop Left Side Bottom Left": "'Zelda Met'",
-            "Market Potion Shop Right Side Bottom Left": "'Zelda Met'",
-            "Market Potion Shop Right Side Top Right": "'Zelda Met'",
-            "Market Potion Shop Right Side Bottom Right": "'Zelda Met'"
+            "Market Potion Shop Left Side Top Right": "has_bottle and is_child",
+            "Market Potion Shop Right Side Top Left": "has_bottle and is_child",
+            "Market Potion Shop Left Side Top Left": "has_bottle and is_child",
+            "Market Potion Shop Left Side Bottom Right": "has_bottle and is_child",
+            "Market Potion Shop Left Side Bottom Left": "has_bottle and is_child",
+            "Market Potion Shop Right Side Bottom Left": "has_bottle and is_child",
+            "Market Potion Shop Right Side Top Right": "has_bottle and is_child",
+            "Market Potion Shop Right Side Bottom Right": "has_bottle and is_child"
         },
         "exits": {
             "Market": "True"

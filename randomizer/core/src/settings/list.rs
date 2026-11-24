@@ -340,7 +340,7 @@ pub fn build() -> Schema {
         Setting::choice(7, "gerudo_fortress", "world", "Gerudo Fortress", "normal")
             .tip("How many carpenters must be rescued to open the Fortress.")
             .opt("normal", "Rescue all four", "Free all four carpenters.")
-            .opt("fast", "Rescue one", "Tested in game. Three carpenters start free. The Membership Card is vanilla and is granted when the last carpenter is rescued.")
+            .opt("fast", "Rescue one", "Tested in game. Three carpenters start free. The guard gives the Membership Card check when the last carpenter is rescued: the card itself, or a random item when the Membership Card is shuffled.")
             .opt("open", "Open", "Tested in game. Start with the Gerudo Membership Card and the bridge built. The Membership Card check is still in the game and randomized. It triggers when you interact with your first jail cell."),
     );
     s.push(
@@ -517,6 +517,12 @@ pub fn build() -> Schema {
             .when("shuffle_rewards", "supported"),
     );
     s.push(
+        Setting::toggle(171, "adult_trade_shuffle", "shuffle", "Shuffle adult trade items", false)
+            .tip("The eleven adult trade items (Pocket Egg to Claim Check) can be anywhere and the ten trade hand ins give only their shuffled item. You keep every trade item you find and hand any of them over whenever you like. Show a trade item where nobody takes it to put the next one you hold on the item button.")
+            .when("shuffle_rewards", "supported")
+            .when_on("shuffle_trade_checks"),
+    );
+    s.push(
         Setting::toggle(65, "shuffle_cows", "shuffle", "Link's House and Gerudo Valley cows", false)
             .tip("The cow in Link's House and the cow in Gerudo Valley each give one extra shuffled item the first time their milk scene starts, with or without a bottle. The milk stays vanilla and stays repeatable. The other cows have their own setting.")
             .when("shuffle_rewards", "supported"),
@@ -548,7 +554,7 @@ pub fn build() -> Schema {
     );
     s.push(
         Setting::toggle(crate::flow_extra::GERUDO_CARD_NUM, crate::flow_extra::GERUDO_CARD, "shuffle", "Gerudo Membership Card", true)
-            .tip("Whether the Gerudo Membership Card, which the guard gives for freeing the four carpenters, is shuffled. When on, the card can be anywhere and the guard gives a random item; when off, she gives the card. Gerudo Fortress \"Rescue one\" always keeps the card vanilla.")
+            .tip("Whether the Gerudo Membership Card, which the guard gives for freeing the four carpenters, is shuffled. When on, the card can be anywhere and the guard gives a random item; when off, she gives the card. This also holds with Gerudo Fortress \"Rescue one\".")
             .when("shuffle_rewards", "supported"),
     );
     s.push(

@@ -34,6 +34,7 @@ const DROPPED: [&str; 6] = ["DependFlagName", "GameSafetySetting", "RequestActor
 const PARENT_PANEL: &str = "DoorOfTime";
 const CHILD_PANEL: &str = "Get_StoneOfFire";
 const OURS: &str = "OOTRR_";
+const QUIET: &str = "IsNotChangeAdventureLog";
 const STEP: &str = "Tracking";
 const PREFIX: &str = "OOTRRKeys";
 const CHECKLIST_KEYS: [&str; 3] = ["NextActionContent", "UseNextActionContentStep", "IsDisplayGameDataFalse"];
@@ -221,6 +222,34 @@ pub fn edit_table(y: &mut Byml) -> Res<usize> {
     Ok(qs.len())
 }
 
+/// The game pops a "next objective" card each time a quest step moves on, unless the step is
+/// marked as not changing the adventure log (minigame and in-dungeon steps already are). Threads of
+/// Time no longer lists the game's quests, so every game step gets the mark; our key quests keep
+/// theirs off, their menu text follows the step and their requests already skip the card.
+pub fn quiet_steps(y: &mut Byml) -> Res<usize> {
+    let rows: &mut Vec<Node> = y.root.as_arr_mut().ok_or(Error::Format("key log: the quest table is not a list"))?;
+    let ours: String = format!("Work/Challenge/{OURS}");
+    let mut seen: usize = 0;
+    let mut n: usize = 0;
+    for r in rows.iter_mut().filter(|r| !id_of(r).starts_with(&ours)) {
+        let Some(steps) = r.get_mut("Steps").and_then(Node::as_arr_mut) else { continue };
+        for st in steps.iter_mut() {
+            match st.get(QUIET) {
+                Some(Node::Bool(true)) => seen += 1,
+                Some(Node::Bool(false)) => {
+                    st.set(QUIET, Node::Bool(true));
+                    n += 1;
+                }
+                _ => return Err(Error::Format("key log: a quest step has no adventure log mark, the game files differ")),
+            }
+        }
+    }
+    if seen + n == 0 {
+        return Err(Error::Format("key log: the quest table has no steps"));
+    }
+    Ok(n)
+}
+
 fn formula_names() -> Vec<String> {
     std::iter::once(ALWAYS.to_string()).chain(DUNGEONS.iter().filter(|d| d.boss).map(no_boss)).collect()
 }
@@ -351,6 +380,7 @@ pub fn stage_table(rf: &mut Romfs, outs: &mut Vec<Out>) -> Res<()> {
     crate::dungeon_grant::merge(rf, outs, TABLE, |raw| {
         let mut y: Byml = Byml::parse(raw)?;
         edit_table(&mut y)?;
+        quiet_steps(&mut y)?;
         y.write()
     })
 }
@@ -434,4 +464,44 @@ pub fn stage_flows(rf: &mut Romfs, late: &mut Vec<Out>, work: &std::path::Path) 
     crate::story_skip::stage_late(rf, late, work, BOOT_FLOW, |b| add_update(b).map(|_| ()))?;
     crate::story_skip::stage_late(rf, late, work, crate::start_state::FLOW, hook_opening)?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn real() -> Option<Romfs> {
+        let p: std::path::PathBuf = ootrr_game::test_romfs::path();
+        if p.join("Pack").join("ZsDic.pack.zs").is_file() {
+            Romfs::open(&p).ok()
+        } else {
+            eprintln!("skipped, no RomFS dump at {} (set OOTRR_ROMFS)", p.display());
+            None
+        }
+    }
+
+    fn quiet(r: &Node) -> Vec<bool> {
+        r.get("Steps").and_then(Node::as_arr).unwrap_or(&[]).iter().map(|s| s.get(QUIET) == Some(&Node::Bool(true))).collect()
+    }
+
+    #[test]
+    fn every_game_quest_step_stops_the_next_objective_card_and_ours_stay() {
+        let Some(mut rf) = real() else { return };
+        let mut y: Byml = rf.read_byml(TABLE).unwrap();
+        let before: usize = y.root.as_arr().unwrap().len();
+        edit_table(&mut y).unwrap();
+        assert!(quiet_steps(&mut y).unwrap() > 100);
+        let rows: &[Node] = y.root.as_arr().unwrap();
+        assert_eq!(rows.len(), before + ids().len());
+        for r in rows {
+            let q: Vec<bool> = quiet(r);
+            assert!(!q.is_empty(), "{} has no steps", id_of(r));
+            if id_of(r).starts_with(&format!("Work/Challenge/{OURS}")) {
+                assert!(q.iter().all(|b| !b), "{} was quieted", id_of(r));
+            } else {
+                assert!(q.iter().all(|b| *b), "{} still shows the card", id_of(r));
+            }
+        }
+        assert_eq!(quiet_steps(&mut y).unwrap(), 0);
+    }
 }

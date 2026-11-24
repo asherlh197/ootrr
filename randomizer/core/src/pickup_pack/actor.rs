@@ -47,6 +47,20 @@ pub fn own_name_ref(name: &str) -> String {
     format!("?ActorSystem/ActorName/{name}.engine__actor__ActorName.bgyml")
 }
 
+pub const DEAL_PARAM: &str = "SpecialDeal";
+pub const STOCK_PARAM: &str = "EnableStock";
+pub const PLAIN_DEAL: &str = "None";
+
+pub fn deal_of(l: &Layers, name: &str) -> Option<(&'static str, bool)> {
+    if l.own {
+        Some((crate::pickup_pack::rows::QUIET_DEAL, false))
+    } else if name.starts_with(crate::slice::key_spots::DUNGEON_PREFIX) {
+        Some((PLAIN_DEAL, true))
+    } else {
+        None
+    }
+}
+
 pub fn pouch_file(name: &str) -> String {
     format!("Component/PouchContentParam/{name}.game__component__PouchContentParam.bgyml")
 }
@@ -252,7 +266,7 @@ pub fn make_with(p: &Pool, s: &Spec, l: &Layers) -> Res<Made> {
 
     match &l.model {
         Some(m) => {
-            let (r, f, b): (String, String, Vec<u8>) = model::anim(&s.name, version)?;
+            let (r, f, b): (String, String, Vec<u8>) = model::anim(&s.name, version, l.pose.as_deref())?;
             comps.set(ANIM_REF, Node::Str(r));
             comps.set(MODEL_REF, Node::Str(model::model_ref(p, m)?));
             extra.push((f, b));
@@ -289,6 +303,13 @@ pub fn make_with(p: &Pool, s: &Spec, l: &Layers) -> Res<Made> {
     pouch.set(FIRST_CHECK, Node::Bool(false));
     if s.style == Style::Touch {
         pouch.set(AUTO_GET, Node::Bool(true));
+    }
+    if let Some((deal, stock)) = deal_of(l, &s.name) {
+        pouch.set(DEAL_PARAM, Node::U32(crate::flags::hash_name(deal)));
+        pouch.set(STOCK_PARAM, Node::Bool(stock));
+        for k in [crate::pickup_pack::kit::MANY, crate::pickup_pack::kit::AT_MAX] {
+            pouch.set(k, Node::Bool(true));
+        }
     }
     Ok(Made {
         actor: (actor_file(&s.name), Byml { root: actor, version, big: false }.write()?),
@@ -416,6 +437,28 @@ pub(crate) mod tests {
         assert_eq!(y.root.get(FIRST_CHECK), Some(&Node::Bool(false)));
         assert_eq!(y.root.get(AUTO_GET), Some(&Node::Bool(true)));
         assert_eq!(y.root.get("SpecialDeal"), None);
+        assert_eq!(y.root.get(crate::pickup_pack::kit::AT_MAX), None);
+    }
+
+    fn pouch_of(name: &str, l: &Layers) -> Byml {
+        let s: Spec = Spec { name: name.to_string(), ..spec(Style::Touch) };
+        Byml::parse(&make_with(&pool(), &s, l).unwrap().pouch.1).unwrap()
+    }
+
+    #[test]
+    fn a_dungeon_item_pack_deals_as_its_pouch_row_says_and_always_plays_its_get() {
+        let own: Layers = Layers { own: true, ..Layers::default() };
+        let cases: [(&str, &Layers, &str, bool); 2] = [("Obj_SmallKey_ForestTemple", &own, "NotPushToPouch", false), ("Obj_OOTRR_SmallKey_ForestTemple", &Layers::default(), "None", true)];
+        for (name, l, deal, stock) in cases {
+            let y: Byml = pouch_of(name, l);
+            assert_eq!(y.root.get(DEAL_PARAM), Some(&Node::U32(crate::flags::hash_name(deal))), "{name}");
+            assert_eq!(y.root.get(STOCK_PARAM), Some(&Node::Bool(stock)), "{name}");
+            for k in [crate::pickup_pack::kit::MANY, crate::pickup_pack::kit::AT_MAX] {
+                assert_eq!(y.root.get(k), Some(&Node::Bool(true)), "{name} {k}");
+            }
+        }
+        assert_eq!(crate::flags::hash_name("SmallKey"), 2499381459);
+        assert_eq!(crate::flags::hash_name("NotPushToPouch"), 2292023464);
     }
 
     #[test]

@@ -273,7 +273,7 @@ mod tests {
         assert!(l.plain());
         let (s, l): (Spec, Layers) = spec("Item_Bottle_Letter", &strs(&["--name", "Obj_Bottle_LetterLand", "--tag", "LetterBottle", "--tag", "LetterBottle"])).unwrap();
         assert_eq!(s.name, "Obj_Bottle_LetterLand");
-        assert_eq!(l, Layers { tags: strs(&["LetterBottle"]), ammo: false, magic: false, model: None, pouch_from: None, ring: None, drop_ring: false, spin: false, lift: 0, own: false });
+        assert_eq!(l, Layers { tags: strs(&["LetterBottle"]), ammo: false, magic: false, model: None, pouch_from: None, ring: None, drop_ring: false, spin: false, lift: 0, own: false, pose: None });
         let (s, l): (Spec, Layers) = spec("Item_Range_Bow", &strs(&["--ammo", "--magic", "--press"])).unwrap();
         assert_eq!(s.style, Style::Press);
         assert!(l.ammo && l.magic);
